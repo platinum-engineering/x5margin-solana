@@ -1,0 +1,20 @@
+[package]
+name = "x5margin-program"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+solar = { path = "../solar" }
+
+solana-program = "1.7.2"
+spl-token = { version = "3.1.1", features = ["no-entrypoint"] }
+num_enum = "0.5"
+static_assertions = "1.1.0"
+
+[dev-dependencies]
+solana-program-test = "1.7.2"
+solana-sdk = "1.7.2"
+tokio = "1.8"
+anyhow = "1"
