@@ -2,6 +2,7 @@ cargo-features = ["named-profiles"]
 
 [workspace]
 members = [
+    "jsonrpc-client",
     "solar", 
     "program", 
     "program-so", 
