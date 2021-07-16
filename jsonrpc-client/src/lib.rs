@@ -66,8 +66,15 @@ struct AccountSliceConfig {
     length: u64,
 }
 
+// https://docs.solana.com/developing/clients/jsonrpc-api#filters
+struct Memcmp {
+    offset: u64,
+    bytes: String,
+}
+
 struct AccountFilter {
-    // https://docs.solana.com/developing/clients/jsonrpc-api#filters
+    data_size: u64,
+    memcmp: Memcmp,
 }
 
 #[async_trait]
@@ -78,6 +85,14 @@ trait Client {
         account: Pubkey,
         slice: Option<AccountSliceConfig>,
     ) -> Result<Account, Error>;
+
+    // https://docs.solana.com/developing/clients/jsonrpc-api#getprogramaccounts
+    async fn get_program_accounts(
+        &self, 
+        program: Pubkey, 
+        slice: Option<AccountSliceConfig>, 
+        filters: Option<&[AccountFilter]>
+    ) -> Result<Vec<Account>, Error>;
     /*
        // https://docs.solana.com/developing/clients/jsonrpc-api#getmultipleaccounts
        async fn get_multiple_accounts(&self, accounts: &[Pubkey], slice: Option<AccountSliceConfig>) -> Result<Vec<Account>, Error>;
@@ -149,6 +164,42 @@ impl Client for RpcClient {
 
         serde_json::from_value(response["result"]["value"].clone()).unwrap()
     }
+
+    async fn get_program_accounts (
+        &self,
+        account: Pubkey,
+        slice: Option<AccountSliceConfig>,
+        filters: Option<&[AccountFilter]>,
+    ) -> Result<Vec<Account>, Error> {
+        let json = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getProgramAccounts",
+            "params": ["SwaPpA9LAaLfeLi3a68M4DjnLqgtticKg6CnyNwgAC8"]
+        });
+
+        let client = reqwest::Client::new();
+        let response: serde_json::Value = client
+            .post("https://api.devnet.solana.com")
+            .json(&json)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        // let res: Result<Vec<Account>, Error> = serde_json::from_value(response["result"].clone())
+        //     .expect("some error");
+
+        // for r in res.iter() {
+        //     println!("{:?}", r);
+        // }
+
+        // return res;
+
+        serde_json::from_value(response["result"].clone()).unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -156,6 +207,7 @@ mod tests {
     use crate::{Client, RpcClient};
     use serde::Serialize;
     use serde_json::Value;
+    use solana_sdk::account::Account;
 
     #[tokio::test]
     async fn get_account_info_test() {
@@ -166,5 +218,16 @@ mod tests {
         let account = solana_sdk::pubkey::Pubkey::new(&arr);
         let response = rpc_client.get_account_info(account, None).await;
         println!("{:?}", response);
+    }
+
+    #[tokio::test]
+    async fn get_program_accounts_test() {
+        let rpc_client = RpcClient {};
+        let arr = bs58::decode("SwaPpA9LAaLfeLi3a68M4DjnLqgtticKg6CnyNwgAC8")
+            .into_vec()
+            .unwrap();
+        let account = solana_sdk::pubkey::Pubkey::new(&arr);
+        let response = rpc_client.get_program_accounts(account, None, None).await;
+        println!("{:#?}", response);
     }
 }
