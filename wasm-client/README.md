@@ -13,8 +13,6 @@ rustup target add wasm32-unknown-unknown
 4. Установка зависимостей и запуск тестового сервера.
 
 ```
-npm install
-# yarn install
-npm run serve
-# yarn run serve
+yarn install
+yarn run serve
 ```

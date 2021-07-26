@@ -2,7 +2,7 @@ const rust = import('./pkg');
 
 rust
     .then(m => {
-        return m.run("rustwasm/wasm-bindgen").then((data) => {
+        return m.run().then((data) => {
             console.log(data);
         })
     })
