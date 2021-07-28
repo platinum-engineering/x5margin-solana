@@ -2380,8 +2380,11 @@ dependencies = [
 name = "solana-api-types"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "serde",
  "serde_derive",
+ "serde_json",
+ "solana-sdk",
 ]
 
 [[package]]
