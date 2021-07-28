@@ -88,10 +88,10 @@ trait Client {
 
     // https://docs.solana.com/developing/clients/jsonrpc-api#getprogramaccounts
     async fn get_program_accounts(
-        &self, 
-        program: Pubkey, 
-        slice: Option<AccountSliceConfig>, 
-        filters: Option<&[AccountFilter]>
+        &self,
+        program: Pubkey,
+        slice: Option<AccountSliceConfig>,
+        filters: Option<&[AccountFilter]>,
     ) -> Result<Vec<Account>, Error>;
     /*
        // https://docs.solana.com/developing/clients/jsonrpc-api#getmultipleaccounts
@@ -138,7 +138,7 @@ impl Client for RpcClient {
             "id": 1,
             "method": "getAccountInfo",
             "params": [
-                "2VWq8XTcDZBvi8v3i8RHonoPP9w74oNDqUeXJortxCZh",
+                account.to_string(),
                 {
                     "encoding": "jsonParsed"
                 }
@@ -156,16 +156,41 @@ impl Client for RpcClient {
             .await
             .unwrap();
 
-        println!("{:#?}", response["result"]["value"]);
+        let acc = response["result"]["value"].clone();
 
-        let acc: Account = serde_json::from_value(response["result"]["value"].clone()).unwrap();
+        let lamports = serde_json::from_value(acc["lamports"].clone()).unwrap();
 
-        println!("{:#?}", acc);
+        let data_format = acc["data"][1].clone();
 
-        serde_json::from_value(response["result"]["value"].clone()).unwrap()
+        let data = match data_format {
+            Value::String(encoding) => match encoding.as_str() {
+                "base64" => base64::decode(&acc["data"][0].as_str().unwrap()).unwrap(),
+                //other encodings will be added if necessary, we don't want to pull more dependencies.
+                _ => Vec::new(),
+            },
+
+            _ => Vec::new(),
+        };
+
+        let owner = serde_json::from_value::<String>(acc["owner"].clone())
+            .unwrap()
+            .parse()
+            .unwrap();
+
+        let executable = serde_json::from_value(acc["executable"].clone()).unwrap();
+
+        let rent_epoch = serde_json::from_value(acc["rentEpoch"].clone()).unwrap();
+
+        Ok(Account {
+            lamports,
+            data,
+            owner,
+            executable,
+            rent_epoch,
+        })
     }
 
-    async fn get_program_accounts (
+    async fn get_program_accounts(
         &self,
         account: Pubkey,
         slice: Option<AccountSliceConfig>,
