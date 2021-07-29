@@ -1,9 +1,12 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{
+    convert::TryFrom,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use async_trait::async_trait;
 use wasm_bindgen::prelude::*;
 
-use solana_api_types::{Client, ClientError};
+use solana_api_types::{Client, ClientError, Pubkey};
 
 struct SolanaApiClient {
     client: reqwest::Client,
@@ -44,7 +47,7 @@ impl SolanaApiClient {
     }
 }
 
-#[async_trait]
+#[async_trait(?Send)]
 impl Client for SolanaApiClient {
     async fn get_account_info(
         &self,
@@ -55,7 +58,8 @@ impl Client for SolanaApiClient {
             .mk_request(Request {
                 method: "getAccountInfo",
                 params: serde_json::json!([
-                    serde_json::to_value(&account)?,
+                    // serde_json::to_value(&account)?,
+                    "4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA",
                     serde_json::to_value(&cfg)?,
                 ]),
             })
@@ -148,16 +152,12 @@ pub async fn run() -> Result<JsValue, JsValue> {
         solana_api_url: "https://api.devnet.solana.com",
     };
 
-    let r = client
-        .mk_request(Request {
-            method: "getAccountInfo",
-            params: serde_json::json!([
-                "4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA",
-                serde_json::Value::Null
-            ]),
-        })
-        .await
-        .unwrap();
+    let pubkey = Pubkey::try_from("4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA").unwrap();
+    let r = client.get_account_info(pubkey, None).await;
+    let r = match r {
+        Ok(a) => String::from("account"),
+        Err(err) => format!("{:?}", err),
+    };
 
     Ok(JsValue::from_serde(&r).unwrap())
 }

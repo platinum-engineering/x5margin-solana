@@ -4,14 +4,16 @@ use serde_json::Value;
 use serde::{Deserialize, Serialize};
 
 mod error;
+mod faucet;
 mod instruction;
+mod pubkey;
 mod short_vec;
 mod signature;
 mod transaction;
-mod faucet;
 
 pub use error::ClientError;
 pub use instruction::InstructionError;
+pub use pubkey::Pubkey;
 pub use signature::Signature;
 pub use transaction::TransactionError;
 
@@ -26,16 +28,6 @@ pub type Slot = u64;
 /// UnixTimestamp is an approximate measure of real-world time,
 /// expressed as Unix time (ie. seconds since the Unix epoch)
 pub type UnixTimestamp = i64;
-
-#[repr(transparent)]
-#[derive(Serialize, Deserialize, Clone, Copy, Default, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct Pubkey([u8; 32]);
-
-impl std::fmt::Debug for Pubkey {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", bs58::encode(self.0).into_string())
-    }
-}
 
 pub const HASH_BYTES: usize = 32;
 
@@ -525,7 +517,7 @@ pub struct RpcSimulateTransactionResult {
     pub accounts: Option<Vec<Option<UiAccount>>>,
 }
 
-#[async_trait]
+#[async_trait(?Send)]
 pub trait Client {
     /// https://docs.solana.com/developing/clients/jsonrpc-api#getaccountinfo
     async fn get_account_info(
