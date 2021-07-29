@@ -2391,6 +2391,7 @@ dependencies = [
  "bincode",
  "bs58 0.4.0",
  "generic-array 0.14.4",
+ "reqwest",
  "serde",
  "serde_bytes",
  "serde_derive",

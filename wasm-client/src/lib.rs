@@ -3,22 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use async_trait::async_trait;
 use wasm_bindgen::prelude::*;
 
-use solana_api_types::Client;
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-enum Error {
-    #[error("json error: {cause}")]
-    JsonError {
-        #[from]
-        cause: serde_json::Error,
-    },
-    #[error("http error: {cause}")]
-    HttpError {
-        #[from]
-        cause: reqwest::Error,
-    },
-}
+use solana_api_types::{Client, ClientError};
 
 struct SolanaApiClient {
     client: reqwest::Client,
@@ -32,7 +17,7 @@ struct Request {
 }
 
 impl SolanaApiClient {
-    async fn mk_request(&self, r: Request) -> Result<serde_json::Value, Error> {
+    async fn mk_request(&self, r: Request) -> Result<serde_json::Value, ClientError> {
         let id = self.current_id.fetch_add(1, Ordering::SeqCst);
 
         let request = serde_json::json!({
@@ -52,8 +37,8 @@ impl SolanaApiClient {
             .send()
             .await?;
 
-        let body = r.text().await?;
-        let body = serde_json::from_str(&body)?;
+        let body = r.bytes().await?;
+        let body = serde_json::from_slice(&body)?;
 
         Ok(body)
     }
@@ -65,15 +50,27 @@ impl Client for SolanaApiClient {
         &self,
         account: solana_api_types::Pubkey,
         cfg: Option<solana_api_types::RpcAccountInfoConfig>,
-    ) -> Result<solana_api_types::Account, solana_api_types::Error> {
-        todo!()
+    ) -> Result<solana_api_types::Account, solana_api_types::ClientError> {
+        let r = self
+            .mk_request(Request {
+                method: "getAccountInfo",
+                params: serde_json::json!([
+                    serde_json::to_value(&account)?,
+                    serde_json::to_value(&cfg)?,
+                ]),
+            })
+            .await?;
+
+        let account = serde_json::from_value(r)?;
+
+        Ok(account)
     }
 
     async fn get_program_accounts(
         &self,
         program: solana_api_types::Pubkey,
         cfg: Option<solana_api_types::RpcProgramAccountsConfig>,
-    ) -> Result<Vec<solana_api_types::RpcKeyedAccount>, solana_api_types::Error> {
+    ) -> Result<Vec<solana_api_types::RpcKeyedAccount>, solana_api_types::ClientError> {
         todo!()
     }
 
@@ -81,7 +78,7 @@ impl Client for SolanaApiClient {
         &self,
         accounts: &[solana_api_types::Pubkey],
         cfg: Option<solana_api_types::RpcAccountInfoConfig>,
-    ) -> Result<Vec<solana_api_types::Account>, solana_api_types::Error> {
+    ) -> Result<Vec<solana_api_types::Account>, solana_api_types::ClientError> {
         todo!()
     }
 
@@ -89,7 +86,7 @@ impl Client for SolanaApiClient {
         &self,
         signatures: &[solana_api_types::Signature],
         cfg: solana_api_types::RpcSignatureStatusConfig,
-    ) -> Result<Vec<solana_api_types::Account>, solana_api_types::Error> {
+    ) -> Result<Vec<solana_api_types::Account>, solana_api_types::ClientError> {
         todo!()
     }
 
@@ -97,14 +94,14 @@ impl Client for SolanaApiClient {
         &self,
         address: &solana_api_types::Pubkey,
         cfg: solana_api_types::RpcSignaturesForAddressConfig,
-    ) -> Result<Vec<solana_api_types::SignatureInfo>, solana_api_types::Error> {
+    ) -> Result<Vec<solana_api_types::SignatureInfo>, solana_api_types::ClientError> {
         todo!()
     }
 
     async fn get_slot(
         &self,
         cfg: Option<solana_api_types::RpcSlotConfig>,
-    ) -> Result<solana_api_types::Slot, solana_api_types::Error> {
+    ) -> Result<solana_api_types::Slot, solana_api_types::ClientError> {
         todo!()
     }
 
@@ -112,7 +109,7 @@ impl Client for SolanaApiClient {
         &self,
         signature: solana_api_types::Signature,
         cfg: Option<solana_api_types::RpcTransactionConfig>,
-    ) -> Result<Option<solana_api_types::EncodedConfirmedTransaction>, solana_api_types::Error>
+    ) -> Result<Option<solana_api_types::EncodedConfirmedTransaction>, solana_api_types::ClientError>
     {
         todo!()
     }
@@ -122,7 +119,7 @@ impl Client for SolanaApiClient {
         pubkey: &solana_api_types::Pubkey,
         lamports: u64,
         commitment: Option<solana_api_types::CommitmentConfig>,
-    ) -> Result<String, solana_api_types::Error> {
+    ) -> Result<String, solana_api_types::ClientError> {
         todo!()
     }
 
@@ -130,7 +127,7 @@ impl Client for SolanaApiClient {
         &self,
         transaction: &solana_api_types::Transaction,
         cfg: solana_api_types::RpcSendTransactionConfig,
-    ) -> Result<String, solana_api_types::Error> {
+    ) -> Result<String, solana_api_types::ClientError> {
         todo!()
     }
 
@@ -138,7 +135,7 @@ impl Client for SolanaApiClient {
         &self,
         transaction: &solana_api_types::Transaction,
         cfg: solana_api_types::RpcSimulateTransactionConfig,
-    ) -> Result<solana_api_types::RpcSimulateTransactionResult, solana_api_types::Error> {
+    ) -> Result<solana_api_types::RpcSimulateTransactionResult, solana_api_types::ClientError> {
         todo!()
     }
 }
@@ -154,7 +151,10 @@ pub async fn run() -> Result<JsValue, JsValue> {
     let r = client
         .mk_request(Request {
             method: "getAccountInfo",
-            params: serde_json::json!(["2WRuhE4GJFoE23DYzp2ij6ZnuQ8p9mJeU6gDgfsjR4or"]),
+            params: serde_json::json!([
+                "4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA",
+                serde_json::Value::Null
+            ]),
         })
         .await
         .unwrap();
