@@ -2386,12 +2386,16 @@ dependencies = [
 name = "solana-api-types"
 version = "0.1.0"
 dependencies = [
+ "assert_matches",
  "async-trait",
+ "bincode",
  "bs58 0.4.0",
+ "generic-array 0.14.4",
  "serde",
+ "serde_bytes",
  "serde_derive",
  "serde_json",
- "solana-sdk",
+ "thiserror",
 ]
 
 [[package]]
@@ -3550,10 +3554,12 @@ checksum = "d7cff876b8f18eed75a66cf49b65e7f967cb354a7aa16003fb55dbfd25b44b4f"
 name = "wasm-client"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "reqwest",
  "serde",
  "serde_derive",
  "serde_json",
+ "solana-api-types",
  "wasm-bindgen",
  "wasm-bindgen-futures",
 ]

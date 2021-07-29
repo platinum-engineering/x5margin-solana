@@ -1,5 +1,9 @@
 use wasm_bindgen::prelude::*;
 
+use solana_api_types::Client;
+
+struct SolanaApiClient {}
+
 #[wasm_bindgen]
 pub async fn run() -> Result<JsValue, JsValue> {
     let req = serde_json::json!({
