@@ -58,6 +58,7 @@ impl Client for SolanaApiClient {
             .mk_request(Request {
                 method: "getAccountInfo",
                 params: serde_json::json!([
+                    // TODO: fix this
                     // serde_json::to_value(&account)?,
                     "4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA",
                     serde_json::to_value(&cfg)?,
