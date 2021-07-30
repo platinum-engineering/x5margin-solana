@@ -1,65 +1,61 @@
+use borsh::BorshDeserialize;
 use num_enum::{FromPrimitive, IntoPrimitive};
+use solar::util::ResultExt;
 
-// pub mod create_farm;
-// pub mod poll;
-// pub mod stake;
+trait Method {
+    const ID: MethodId;
+}
 
 #[repr(u16)]
-#[derive(Eq, PartialEq, IntoPrimitive, FromPrimitive)]
-pub enum OperationKind {
-    /*
-        Service ops.
-    */
-    Poll = 0x00_00,
-    CreateFarm = 0x00_01,
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Eq,
+    PartialEq,
+    IntoPrimitive,
+    FromPrimitive,
+    BorshSerialize,
+    BorshDeserialize,
+)]
 
-    /*
-        Business operations ops.
-    */
-    Stake = 0x01_00,
-    Unstake = 0x01_01,
-    ClaimRewards = 0x01_02,
+pub enum MethodId {
+    CreateStakePool,
 
     #[num_enum(default)]
     Unknown = 0xFF_FF,
 }
 
-#[repr(C)]
-pub struct OperationHeader {
-    pub kind: OperationKind,
+#[derive(Debug, Clone, Copy, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
+pub struct InvokeHeader {
+    pub id: MethodId,
     pub version: u16,
     padding: u32,
 }
 
-#[repr(C)]
-struct OperationHeaderRaw {
-    kind: u16,
-    version: u16,
-    padding: u32,
-}
-
-pub struct Operation<'a> {
-    pub header: &'a OperationHeader,
+pub struct Invoke<'a> {
+    pub header: InvokeHeader,
     pub data: &'a [u8],
 }
 
-impl<'a> Operation<'a> {
-    pub fn from_buf(data: &'a [u8]) -> Self {
-        unsafe {
-            assert!(data.len() >= 4, "operation data must be at least 4 bytes");
+impl<'a> Invoke<'a> {
+    pub fn from_buf(mut data: &'a [u8]) -> Self {
+        let header = InvokeHeader::deserialize(&mut data)
+            .ok()
+            .bpf_expect("invalid operation");
 
-            let raw_header_ptr = data.as_ptr().cast::<OperationHeaderRaw>();
-            let raw_header = &*raw_header_ptr;
+        Self { header, data }
+    }
 
-            assert!(
-                OperationKind::from_primitive(raw_header.kind) != OperationKind::Unknown,
-                "must provide valid operation id"
-            );
+    pub fn id(&self) -> MethodId {
+        self.header.id
+    }
 
-            let header = &*raw_header_ptr.cast::<OperationHeader>();
-            let data = &data[4..];
+    pub fn version(&self) -> u16 {
+        self.header.version
+    }
 
-            Operation { header, data }
-        }
+    pub fn args<T: BorshDeserialize>(&self) -> Option<T> {
+        T::try_from_slice(self.data).ok()
     }
 }

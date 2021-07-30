@@ -22,6 +22,8 @@ use std::{
     slice::{from_raw_parts, from_raw_parts_mut},
 };
 
+use solana_program::pubkey::Pubkey;
+
 /// Checks if the given byte slice satisfies the size and alignment requirements of the target type `T`.
 pub fn is_valid_for_type<T>(data: &[u8]) -> bool {
     data.len() >= size_of::<T>() && (data.as_ptr() as usize) % align_of::<T>() == 0
@@ -134,3 +136,25 @@ pub unsafe fn reinterpret_slice_mut_unchecked<T>(data: &mut [u8]) -> &mut [T] {
 
     from_raw_parts_mut(data.as_mut_ptr() as *mut T, count)
 }
+
+pub fn as_bytes<T>(value: &T) -> &[u8] {
+    unsafe { from_raw_parts(value as *const _ as *const u8, size_of::<T>()) }
+}
+
+pub unsafe trait ReinterpretSafe {}
+
+macro_rules! impl_reinterpret_safe {
+    ($($t:ty),*) => {
+        $(
+            unsafe impl ReinterpretSafe for $t {}
+        )*
+    };
+}
+
+impl_reinterpret_safe! {
+    i8, i16, i32, i64, i128,
+    u8, u16, u32, u64, u128,
+    Pubkey
+}
+
+unsafe impl<T: ReinterpretSafe, const N: usize> ReinterpretSafe for [T; N] {}

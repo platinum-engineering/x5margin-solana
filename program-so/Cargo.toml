@@ -13,4 +13,4 @@ solana-program = "1.7.2"
 
 [lib]
 crate-type = ["cdylib"]
-name = "platinum_trade"
+name = "x5margin"

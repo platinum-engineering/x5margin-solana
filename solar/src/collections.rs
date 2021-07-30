@@ -1,4 +1,5 @@
 use std::{
+    io::{ErrorKind, Write},
     marker::PhantomData,
     mem::size_of,
     mem::{align_of, MaybeUninit},
@@ -8,32 +9,34 @@ use std::{
 };
 
 use crate::{
-    data::{
+    mem::memmove,
+    reinterpret::{
         is_valid_for_type, reinterpret_mut_unchecked, reinterpret_slice_mut_unchecked,
         reinterpret_slice_unchecked, reinterpret_unchecked,
     },
-    mem::memmove,
 };
 
 /// A simple `Vec`-like type for usage as a dynamically-sized container of objects
 /// inside Solana accounts.
-pub struct SolVec<'a, T> {
+pub struct VecViewMut<'a, T> {
     len: &'a mut u64,
     elems: &'a mut [MaybeUninit<T>],
 }
 
-pub struct SolSlice<'a, T> {
+pub struct VecView<'a, T> {
     len: &'a u64,
     elems: &'a [MaybeUninit<T>],
 }
 
-impl<'a, T> AsRef<[T]> for SolSlice<'a, T> {
-    fn as_ref(&self) -> &[T] {
+impl<'a, T> Deref for VecView<'a, T> {
+    type Target = [T];
+
+    fn deref(&self) -> &[T] {
         unsafe { from_raw_parts(self.elems.as_ptr().cast(), *self.len as usize) }
     }
 }
 
-impl<'a, T> Drop for SolVec<'a, T> {
+impl<'a, T> Drop for VecViewMut<'a, T> {
     fn drop(&mut self) {
         for elem in self.as_mut() {
             unsafe { drop_in_place(elem as *mut T) };
@@ -41,19 +44,21 @@ impl<'a, T> Drop for SolVec<'a, T> {
     }
 }
 
-impl<'a, T> AsRef<[T]> for SolVec<'a, T> {
-    fn as_ref(&self) -> &[T] {
+impl<'a, T> Deref for VecViewMut<'a, T> {
+    type Target = [T];
+
+    fn deref(&self) -> &[T] {
         unsafe { from_raw_parts(self.elems.as_ptr().cast(), *self.len as usize) }
     }
 }
 
-impl<'a, T> AsMut<[T]> for SolVec<'a, T> {
-    fn as_mut(&mut self) -> &mut [T] {
+impl<'a, T> DerefMut for VecViewMut<'a, T> {
+    fn deref_mut(&mut self) -> &mut [T] {
         unsafe { from_raw_parts_mut(self.elems.as_mut_ptr().cast(), *self.len as usize) }
     }
 }
 
-impl<'a, T> SolSlice<'a, T> {
+impl<'a, T> VecView<'a, T> {
     pub fn load(data: &'a [u8]) -> Option<Self> {
         // must have valid alignment for T and VecData
         // and must be able to hold at least 1 `T`
@@ -82,7 +87,68 @@ impl<'a, T> SolSlice<'a, T> {
     }
 }
 
-impl<'a, T> SolVec<'a, T> {
+#[inline]
+unsafe fn vec_like_push<T>(len: &mut u64, capacity: usize, elems: *mut T, elem: T) {
+    assert!((*len as usize) < capacity);
+    elems.add(*len as usize).write(elem);
+    *len = len.checked_add(1).expect("integer overflow");
+}
+
+#[inline]
+unsafe fn vec_like_pop<T>(len: &mut u64, elems: *mut T) -> Option<T> {
+    if *len > 0 {
+        *len = len.checked_sub(1).expect("integer underflow");
+        let elem = elems.add(*len as usize).read();
+        Some(elem)
+    } else {
+        None
+    }
+}
+
+#[inline]
+unsafe fn vec_like_remove<T>(len: &mut u64, elems: *mut T, idx: usize) -> Option<T> {
+    if idx < *len as usize {
+        let elem = elems.add(idx).read();
+
+        let to_move = *len as usize - idx - 1;
+        if to_move > 1 {
+            memmove(
+                elems.add(idx + 1).cast(),
+                elems.add(idx).cast(),
+                to_move * size_of::<T>(),
+            )
+        }
+
+        *len = len.checked_sub(1).expect("integer underflow");
+
+        Some(elem)
+    } else {
+        None
+    }
+}
+
+#[inline]
+unsafe fn vec_like_insert<T>(len: &mut u64, capacity: usize, elems: *mut T, idx: usize, elem: T) {
+    assert!((*len as usize) < capacity);
+    assert!(idx <= *len as usize);
+
+    let to_move = *len as usize - idx;
+    if to_move > 0 {
+        memmove(
+            elems.add(idx).cast(),
+            elems.add(idx + 1).cast(),
+            to_move * size_of::<T>(),
+        );
+
+        elems.add(idx).write(elem);
+
+        *len = len.checked_add(1).expect("integer overflow");
+    } else {
+        vec_like_push(len, capacity, elems, elem)
+    }
+}
+
+impl<'a, T> VecViewMut<'a, T> {
     pub fn load(data: &'a mut [u8]) -> Option<Self> {
         // must have valid alignment for T and VecData
         // and must be able to hold at least 1 `T`
@@ -117,67 +183,26 @@ impl<'a, T> SolVec<'a, T> {
 
     #[inline]
     pub fn push(&mut self, elem: T) {
-        assert!((*self.len as usize) < self.elems.len());
-
-        unsafe { self.elems_mut_ptr().add(*self.len as usize).write(elem) };
-        *self.len += 1;
+        let elems = self.elems_mut_ptr();
+        unsafe { vec_like_push(&mut self.len, self.elems.len(), elems, elem) }
     }
 
     #[inline]
     pub fn pop(&mut self) -> Option<T> {
-        if *self.len > 0 {
-            *self.len -= 1;
-            let elem = unsafe { self.elems_mut_ptr().add(*self.len as usize).read() };
-            Some(elem)
-        } else {
-            None
-        }
+        let elems = self.elems_mut_ptr();
+        unsafe { vec_like_pop(&mut self.len, elems) }
     }
 
     #[inline]
     pub fn remove(&mut self, idx: usize) -> Option<T> {
-        if idx < *self.len as usize {
-            let elems = self.elems_mut_ptr();
-            let elem = unsafe { elems.add(idx).read() };
-
-            let to_move = *self.len as usize - idx - 1;
-            if to_move > 1 {
-                unsafe {
-                    memmove(
-                        elems.add(idx + 1).cast(),
-                        elems.add(idx).cast(),
-                        to_move * size_of::<T>(),
-                    )
-                }
-            }
-
-            Some(elem)
-        } else {
-            None
-        }
+        let elems = self.elems_mut_ptr();
+        unsafe { vec_like_remove(&mut self.len, elems, idx) }
     }
 
     #[inline]
     pub fn insert(&mut self, idx: usize, elem: T) {
-        assert!((*self.len as usize) < self.elems.len());
-        assert!(idx <= *self.len as usize);
-
-        let to_move = *self.len as usize - idx;
-        if to_move > 0 {
-            let elems = self.elems_mut_ptr();
-
-            unsafe {
-                memmove(
-                    elems.add(idx).cast(),
-                    elems.add(idx + 1).cast(),
-                    to_move * size_of::<T>(),
-                )
-            }
-
-            unsafe { elems.add(idx).write(elem) }
-        } else {
-            self.push(elem)
-        }
+        let elems = self.elems_mut_ptr();
+        unsafe { vec_like_insert(&mut self.len, self.elems.len(), elems, idx, elem) }
     }
 }
 
@@ -248,5 +273,104 @@ impl<T, const S: usize> DerefMut for SolCell<T, S> {
         assert!(self.is_initialized);
 
         unsafe { &mut *self.data.as_mut_ptr().cast() }
+    }
+}
+
+pub struct StaticVec<T, const N: usize> {
+    elems: [MaybeUninit<T>; N],
+    len: u64,
+}
+
+impl<T, const N: usize> Default for StaticVec<T, N> {
+    fn default() -> Self {
+        Self {
+            elems: MaybeUninit::uninit_array(),
+            len: 0,
+        }
+    }
+}
+
+impl<T, const N: usize> Deref for StaticVec<T, N> {
+    type Target = [T];
+
+    fn deref(&self) -> &[T] {
+        unsafe { from_raw_parts(self.elems.as_ptr().cast(), self.len as usize) }
+    }
+}
+
+impl<T, const N: usize> DerefMut for StaticVec<T, N> {
+    fn deref_mut(&mut self) -> &mut [T] {
+        unsafe { from_raw_parts_mut(self.elems.as_mut_ptr().cast(), self.len as usize) }
+    }
+}
+
+impl<T, const N: usize> StaticVec<T, N> {
+    #[inline]
+    fn elems_mut_ptr(&mut self) -> *mut T {
+        self.elems.as_mut_ptr().cast()
+    }
+
+    #[inline]
+    pub fn capacity(&self) -> usize {
+        self.elems.len()
+    }
+
+    #[inline]
+    pub fn push(&mut self, elem: T) {
+        let elems = self.elems_mut_ptr();
+        unsafe { vec_like_push(&mut self.len, self.elems.len(), elems, elem) }
+    }
+
+    #[inline]
+    pub fn pop(&mut self) -> Option<T> {
+        let elems = self.elems_mut_ptr();
+        unsafe { vec_like_pop(&mut self.len, elems) }
+    }
+
+    #[inline]
+    pub fn remove(&mut self, idx: usize) -> Option<T> {
+        let elems = self.elems_mut_ptr();
+        unsafe { vec_like_remove(&mut self.len, elems, idx) }
+    }
+
+    #[inline]
+    pub fn insert(&mut self, idx: usize, elem: T) {
+        let elems = self.elems_mut_ptr();
+        unsafe { vec_like_insert(&mut self.len, self.elems.len(), elems, idx, elem) }
+    }
+}
+
+impl<const N: usize> Write for StaticVec<u8, N> {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let writable = &buf[..self.capacity() - self.len()];
+
+        if !writable.is_empty() {
+            unsafe {
+                self.elems_mut_ptr()
+                    .add(self.len())
+                    .copy_from_nonoverlapping(writable.as_ptr(), writable.len())
+            }
+        }
+
+        Ok(writable.len())
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        if buf.len() <= (self.capacity() - self.len()) {
+            unsafe {
+                self.elems_mut_ptr()
+                    .add(self.len())
+                    .copy_from_nonoverlapping(buf.as_ptr(), buf.len())
+            }
+
+            Ok(())
+        } else {
+            Err(ErrorKind::Interrupted.into())
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }

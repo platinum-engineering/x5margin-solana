@@ -1,6 +1,9 @@
-use solana_program::pubkey::Pubkey;
+use std::{borrow::Borrow, mem::size_of};
 
-use crate::mem::memcmp;
+use chrono::{DateTime, TimeZone, Utc};
+use solana_program::{clock::Clock, pubkey::Pubkey, sysvar::Sysvar};
+
+use crate::{log::Loggable, mem::memcmp, qlog};
 
 #[macro_export]
 macro_rules! bytecode_marker {
@@ -21,35 +24,19 @@ pub trait AsPubkey {
     fn as_pubkey(&self) -> &Pubkey;
 }
 
-impl ToPubkey for Pubkey {
-    #[inline(always)]
+impl<T: AsPubkey> ToPubkey for T {
     fn to_pubkey(&self) -> Pubkey {
-        *self
+        *self.as_pubkey()
     }
 }
 
-impl ToPubkey for &Pubkey {
-    #[inline(always)]
-    fn to_pubkey(&self) -> Pubkey {
-        **self
-    }
-}
-
-impl AsPubkey for Pubkey {
-    #[inline(always)]
+impl<T: Borrow<Pubkey>> AsPubkey for T {
     fn as_pubkey(&self) -> &Pubkey {
-        self
+        self.borrow()
     }
 }
 
-impl AsPubkey for &Pubkey {
-    #[inline(always)]
-    fn as_pubkey(&self) -> &Pubkey {
-        self
-    }
-}
-
-#[inline(always)]
+#[cfg_attr(target_arch = "bpf", inline(never))]
 pub fn pubkey_eq<A: AsPubkey, B: AsPubkey>(a: A, b: B) -> bool {
     unsafe {
         memcmp(
@@ -58,4 +45,174 @@ pub fn pubkey_eq<A: AsPubkey, B: AsPubkey>(a: A, b: B) -> bool {
             32,
         ) == 0
     }
+}
+
+pub trait ResultExt<T, E> {
+    fn bpf_unwrap(self) -> T;
+    fn bpf_expect(self, message: &'static str) -> T;
+    fn bpf_context(self, context: &'static str) -> Self;
+}
+
+impl<T, E: Loggable> ResultExt<T, E> for Result<T, E> {
+    #[track_caller]
+    fn bpf_unwrap(self) -> T {
+        match self {
+            Ok(v) => v,
+            Err(error) => {
+                let location = std::panic::Location::caller();
+                qlog!(
+                    location.file(),
+                    ":",
+                    location.line(),
+                    ": unwrap on err value: ",
+                    error
+                );
+                panic!("unwrap on err value");
+            }
+        }
+    }
+
+    #[track_caller]
+    fn bpf_expect(self, message: &'static str) -> T {
+        match self {
+            Ok(v) => v,
+            Err(error) => {
+                let location = std::panic::Location::caller();
+                qlog!(
+                    location.file(),
+                    ":",
+                    location.line(),
+                    ": expect on err value `",
+                    message,
+                    "` ",
+                    error
+                );
+                panic!("expect on err value");
+            }
+        }
+    }
+
+    #[track_caller]
+    fn bpf_context(self, context: &'static str) -> Self {
+        if self.is_err() {
+            let location = std::panic::Location::caller();
+            qlog!(
+                location.file(),
+                ":",
+                location.line(),
+                ": error occured `",
+                context,
+                "`"
+            );
+        }
+
+        self
+    }
+}
+
+impl<T> ResultExt<T, ()> for Option<T> {
+    #[track_caller]
+    fn bpf_unwrap(self) -> T {
+        match self {
+            Some(v) => v,
+            None => {
+                let location = std::panic::Location::caller();
+                qlog!(location.file(), ":", location.line(), ": unwrap on `None`");
+                panic!("unwrap on `None`");
+            }
+        }
+    }
+
+    #[track_caller]
+    fn bpf_expect(self, message: &'static str) -> T {
+        match self {
+            Some(v) => v,
+            None => {
+                let location = std::panic::Location::caller();
+                qlog!(
+                    location.file(),
+                    ":",
+                    location.line(),
+                    ": expect on `None` `",
+                    message,
+                    "` "
+                );
+                panic!("expect on `None`");
+            }
+        }
+    }
+
+    #[track_caller]
+    fn bpf_context(self, context: &'static str) -> Self {
+        if self.is_none() {
+            let location = std::panic::Location::caller();
+            qlog!(
+                location.file(),
+                ":",
+                location.line(),
+                ": error occured `",
+                context,
+                "`"
+            );
+        }
+
+        self
+    }
+}
+
+#[cfg_attr(target_arch = "bpf", inline(never))]
+pub fn is_zeroed(slice: &[u8]) -> bool {
+    if cfg!(target_arch = "bpf") {
+        const ALIGNMENT: usize = size_of::<u64>();
+        const BATCH_SIZE: usize = 64;
+
+        unsafe {
+            let mut acc: u64 = 0;
+            let start_misalign = slice.as_ptr() as usize % ALIGNMENT;
+            let mut ptr = slice.as_ptr();
+            let end_ptr = slice.as_ptr().add(slice.len());
+
+            if start_misalign > 0 {
+                for _ in 0..(ALIGNMENT - start_misalign) {
+                    acc |= ptr.read() as u64;
+                    ptr = ptr.add(1);
+                }
+            }
+
+            // compare using 64-bit operations, takes 8 times less opcodes than if we were using u8's
+            while end_ptr as usize - ptr as usize >= BATCH_SIZE {
+                let aligned_ptr = ptr.cast::<u64>();
+
+                // loop will be unrolled by optimizer, less overhead for branching
+                for i in 0..BATCH_SIZE / 8 {
+                    acc |= aligned_ptr.add(i).read();
+                }
+
+                ptr = ptr.add(BATCH_SIZE);
+            }
+
+            while end_ptr as usize - ptr as usize > 0 {
+                acc |= ptr.read() as u64;
+                ptr = ptr.add(1);
+            }
+
+            acc == 0
+        }
+    } else {
+        for b in slice {
+            if *b != 0 {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+pub fn timestamp_now() -> i64 {
+    Clock::get().bpf_unwrap().unix_timestamp
+}
+
+pub fn datetime_now() -> DateTime<Utc> {
+    Utc.timestamp(timestamp_now(), 0)
 }

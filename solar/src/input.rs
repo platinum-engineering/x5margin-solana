@@ -1,10 +1,14 @@
 use std::{
     alloc::Layout,
     mem::{align_of, size_of, MaybeUninit},
-    slice::{from_raw_parts, from_raw_parts_mut},
+    slice::from_raw_parts,
 };
 
-use solana_program::{entrypoint::MAX_PERMITTED_DATA_INCREASE, pubkey::Pubkey};
+use solana_program::{
+    account_info::AccountInfo,
+    entrypoint::{ProgramResult, MAX_PERMITTED_DATA_INCREASE},
+    pubkey::Pubkey,
+};
 
 use crate::account::onchain::{Account, AccountRef};
 
@@ -17,17 +21,17 @@ pub struct ProgramInput {
 }
 
 pub struct ProgramAccounts {
-    accounts: &'static mut [MaybeUninit<Account<'static>>; MAX_ACCOUNTS],
-    size: usize,
+    accounts: &'static mut [MaybeUninit<Account>; MAX_ACCOUNTS],
+    len: usize,
     cursor: usize,
 }
 
 #[repr(C)]
 struct SerializedAccount {
     dup_info: u8,
-    is_signer: bool,
-    is_writable: bool,
-    executable: bool,
+    is_signer: u8,
+    is_writable: u8,
+    executable: u8,
     padding: [u8; 4],
     key: Pubkey,
     owner: Pubkey,
@@ -60,10 +64,9 @@ impl ProgramInput {
             if dup_info == std::u8::MAX {
                 let serialized = &mut *(input as *mut SerializedAccount);
                 let data_len = serialized.data_len as usize;
-                let data_ptr = input.add(size_of::<SerializedAccount>());
-                let data = from_raw_parts_mut(data_ptr, data_len);
+                let data = input.add(size_of::<SerializedAccount>());
 
-                let data_end = data_ptr.add(data_len + MAX_PERMITTED_DATA_INCREASE);
+                let data_end = data.add(data_len + MAX_PERMITTED_DATA_INCREASE);
                 let slack = align_of::<u128>() - data_end as usize % align_of::<u128>();
                 let data_end = data_end.add(slack);
 
@@ -71,12 +74,13 @@ impl ProgramInput {
 
                 accounts.get_unchecked_mut(i).as_mut_ptr().write(Account {
                     key: &serialized.key,
-                    is_signer: serialized.is_signer,
-                    is_writable: serialized.is_writable,
+                    is_signer: serialized.is_signer == 1,
+                    is_writable: serialized.is_writable == 1,
                     lamports: &mut serialized.lamports,
+                    data_len,
                     data,
                     owner: &serialized.owner,
-                    is_executable: serialized.executable,
+                    is_executable: serialized.executable == 1,
                     rent_epoch,
                 });
 
@@ -94,7 +98,7 @@ impl ProgramInput {
 
         let accounts = ProgramAccounts {
             accounts,
-            size: num_accounts,
+            len: num_accounts,
             cursor: 0,
         };
 
@@ -121,6 +125,23 @@ impl ProgramInput {
     pub fn take_accounts<const N: usize>(&mut self) -> [AccountRef; N] {
         self.accounts.take_accounts::<N>()
     }
+
+    #[inline(always)]
+    pub fn next_account(&mut self) -> AccountRef {
+        self.accounts.next_account()
+    }
+
+    pub fn remaining(&self) -> usize {
+        self.accounts.remaining()
+    }
+
+    pub fn len(&self) -> usize {
+        self.accounts.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.accounts.is_empty()
+    }
 }
 
 impl ProgramAccounts {
@@ -128,7 +149,7 @@ impl ProgramAccounts {
     pub fn take_accounts<const N: usize>(&mut self) -> [AccountRef; N] {
         assert!(N > 0);
 
-        if self.cursor + N > self.size {
+        if self.cursor + N > self.len {
             panic!("tried to take more accounts than available");
         }
 
@@ -155,6 +176,78 @@ impl ProgramAccounts {
         // transmute via evil ptr casting
         unsafe { array.as_ptr().cast::<[AccountRef; N]>().read() }
     }
+
+    #[inline]
+    pub fn next_account(&mut self) -> AccountRef {
+        if self.cursor >= self.len {
+            panic!("tried to take more accounts than available");
+        }
+
+        let account = unsafe { (*self.accounts.as_mut_ptr().add(self.cursor)).assume_init_mut() };
+
+        self.cursor += 1;
+        account
+    }
+
+    pub fn remaining(&self) -> usize {
+        self.len - self.cursor
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == self.cursor
+    }
+}
+
+pub trait Entrypoint {
+    fn call(input: ProgramInput) -> ProgramResult;
+}
+
+pub fn wrapped_entrypoint<T: Entrypoint>(
+    program_id: &Pubkey,
+    account_infos: &[AccountInfo],
+    data: &[u8],
+) -> ProgramResult {
+    if account_infos.len() > MAX_ACCOUNTS {
+        panic!("too many accounts");
+    }
+
+    let mut accounts_array: [MaybeUninit<Account>; MAX_ACCOUNTS] = MaybeUninit::uninit_array();
+    for (i, info) in account_infos.iter().enumerate() {
+        unsafe {
+            let mut lamports = info.lamports.borrow_mut();
+            let lamports = (&mut **lamports) as *mut u64;
+
+            accounts_array[i].as_mut_ptr().write(Account {
+                key: info.key,
+                lamports,
+                data_len: info.data_len(),
+                data: info.data.borrow_mut().as_mut_ptr(),
+                owner: info.owner,
+                rent_epoch: info.rent_epoch,
+                is_signer: info.is_signer,
+                is_writable: info.is_writable,
+                is_executable: info.executable,
+            })
+        }
+    }
+
+    let accounts = ProgramAccounts {
+        accounts: unsafe { &mut *(&mut accounts_array as *mut _) },
+        len: account_infos.len(),
+        cursor: 0,
+    };
+
+    let input = ProgramInput {
+        program_id: unsafe { &*(program_id as *const Pubkey) },
+        accounts,
+        data: unsafe { &*(data as *const [u8]) },
+    };
+
+    T::call(input)
 }
 
 // impl<'a> Account<'a> {

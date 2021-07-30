@@ -6,12 +6,15 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-solar = { path = "../solar" }
+solar = { path = "../solar", features = ["sol-mem-intrinsics"] }
+solar-macros = { path = "../solar-macros" }
 
 solana-program = "1.7.2"
 spl-token = { version = "3.1.1", features = ["no-entrypoint"] }
 num_enum = "0.5"
 static_assertions = "1.1.0"
+chrono = { version = "0.4.19", default-features = false }
+borsh = "0.9.1"
 
 [dev-dependencies]
 solana-program-test = "1.7.2"

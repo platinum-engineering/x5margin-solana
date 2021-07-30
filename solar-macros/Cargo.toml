@@ -1,0 +1,12 @@
+[package]
+name = "solar-macros"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+syn = "1.0.73"
+proc-macro2 = { version = "1.0.24", features = ["nightly"] }
+quote = "1.0"
+
+[lib]
+proc-macro = true
