@@ -1,5 +1,6 @@
 use std::{
     convert::TryFrom,
+    str::FromStr,
     sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -7,7 +8,10 @@ use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Deserialize};
 use wasm_bindgen::prelude::*;
 
-use solana_api_types::{Client, ClientError, Pubkey, RpcError, RpcResponse, UiAccount};
+use solana_api_types::{
+    Client, ClientError, Pubkey, RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse,
+    UiAccount, UiAccountEncoding,
+};
 
 struct SolanaApiClient {
     client: reqwest::Client,
@@ -73,7 +77,7 @@ impl Client for SolanaApiClient {
 
         let account = r
             .value
-            .decode()
+            .decode(account)
             .ok_or_else(|| RpcError::ParseError("failed to decode account".to_string()))?;
 
         Ok(account)
@@ -83,13 +87,21 @@ impl Client for SolanaApiClient {
         &self,
         program: solana_api_types::Pubkey,
         cfg: Option<solana_api_types::RpcProgramAccountsConfig>,
-    ) -> Result<Vec<solana_api_types::RpcKeyedAccount>, solana_api_types::ClientError> {
-        let r = self
+    ) -> Result<Vec<solana_api_types::Account>, solana_api_types::ClientError> {
+        let r: Vec<RpcKeyedAccount> = self
             .mk_request(Request {
                 method: "getProgramAccounts",
                 params: serde_json::json!([program.to_string(), serde_json::to_value(&cfg)?,]),
             })
             .await?;
+
+        let r = r
+            .into_iter()
+            .filter_map(|a| {
+                let pubkey = Pubkey::from_str(a.pubkey.as_str()).ok()?;
+                a.account.decode(pubkey)
+            })
+            .collect();
 
         Ok(r)
     }
@@ -99,7 +111,22 @@ impl Client for SolanaApiClient {
         accounts: &[solana_api_types::Pubkey],
         cfg: Option<solana_api_types::RpcAccountInfoConfig>,
     ) -> Result<Vec<solana_api_types::Account>, solana_api_types::ClientError> {
-        todo!()
+        let accounts_as_str: Vec<String> = accounts.iter().map(|a| a.to_string()).collect();
+        let r: RpcResponse<Vec<Option<UiAccount>>> = self
+            .mk_request(Request {
+                method: "getMultipleAccounts",
+                params: serde_json::json!([accounts_as_str, serde_json::to_value(&cfg)?,]),
+            })
+            .await?;
+
+        let r = r
+            .value
+            .into_iter()
+            .zip(accounts)
+            .filter_map(|(acc, key)| acc?.decode(*key))
+            .collect();
+
+        Ok(r)
     }
 
     async fn get_signature_statuses(
@@ -180,6 +207,23 @@ pub async fn run() -> Result<JsValue, JsValue> {
     let pubkey = Pubkey::try_from("4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T").unwrap();
     let r = client
         .get_program_accounts(pubkey, None)
+        .await
+        .map_err(|err| JsValue::from_str(err.to_string().as_str()))?;
+    let r = JsValue::from_serde(&r).unwrap();
+
+    let accounts = &[
+        Pubkey::try_from("vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg").unwrap(),
+        Pubkey::try_from("4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA").unwrap(),
+    ];
+    let r = client
+        .get_multiple_accounts(
+            accounts,
+            Some(RpcAccountInfoConfig {
+                encoding: Some(UiAccountEncoding::Base58),
+                data_slice: None,
+                commitment: None,
+            }),
+        )
         .await
         .map_err(|err| JsValue::from_str(err.to_string().as_str()))?;
     let r = JsValue::from_serde(&r).unwrap();
