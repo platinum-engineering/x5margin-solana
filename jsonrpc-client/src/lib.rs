@@ -131,7 +131,7 @@ trait Client {
     ) -> u64;
 
     // https://docs.solana.com/developing/clients/jsonrpc-api#requestairdrop
-    async fn request_airdrop(&self, pubkey: &Pubkey, lamports: u64) -> u64;
+    async fn request_airdrop(&self, pubkey: &Pubkey, lamports: u64) -> String;
 
     // https://docs.solana.com/developing/clients/jsonrpc-api#sendtransaction
     // async fn send_transaction(
@@ -314,7 +314,24 @@ impl Client for RpcClient {
     }
 
     async fn get_slot(&self, slice: Option<AccountSliceConfig>) -> u64 {
-        todo!()
+        let json = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getSlot",
+        });
+
+        let client = reqwest::Client::new();
+        let response: serde_json::Value = client
+            .post("https://api.devnet.solana.com")
+            .json(&json)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        serde_json::from_value(response["result"].clone()).unwrap()
     }
 
     async fn get_transaction(
@@ -325,8 +342,31 @@ impl Client for RpcClient {
         todo!()
     }
 
-    async fn request_airdrop(&self, pubkey: &Pubkey, lamports: u64) -> u64 {
-        todo!()
+    async fn request_airdrop(&self, account: &Pubkey, lamports: u64) -> String {
+        let json = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "requestAirdrop",
+           "params": [
+                account.to_string(), lamports,
+                {
+                    "encoding": "jsonParsed"
+                }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+        let response: serde_json::Value = client
+            .post("https://api.devnet.solana.com")
+            .json(&json)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        serde_json::from_value(response["result"].clone()).unwrap()
     }
 
     async fn send_transaction(&self, transaction: &Transaction) -> u64 {
@@ -382,7 +422,23 @@ mod tests {
             solana_sdk::pubkey::Pubkey::new(&arr2),
         ];
         let response = rpc_client.get_multiple_accounts(&accounts, None).await;
-        println!("{:#?}", response);
         assert_eq!(format!("{:?}", response), "Ok([Account { lamports: 1000000000 data.len: 0 owner: 11111111111111111111111111111111 executable: false rent_epoch: 164 }, Account { lamports: 998763433 data.len: 0 owner: 2WRuhE4GJFoE23DYzp2ij6ZnuQ8p9mJeU6gDgfsjR4or executable: false rent_epoch: 164 }])");
+    }
+
+    #[tokio::test]
+    async fn get_slot_test() {
+        let rpc_client = RpcClient {};
+        let _response = rpc_client.get_slot(None).await;
+    }
+
+    #[tokio::test]
+    async fn request_airdrop_test() {
+        let rpc_client = RpcClient {};
+        let arr = bs58::decode("83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri")
+            .into_vec()
+            .unwrap();
+        let _response = rpc_client
+            .request_airdrop(&solana_sdk::pubkey::Pubkey::new(&arr), 10)
+            .await;
     }
 }
