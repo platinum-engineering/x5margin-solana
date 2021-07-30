@@ -132,7 +132,7 @@ pub struct Message {
 
 /// An Account with data that is stored on chain
 #[repr(C)]
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Default)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Default, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
     /// lamports in the account
@@ -299,6 +299,7 @@ pub struct RpcProgramAccountsConfig {
     pub with_context: Option<bool>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RpcKeyedAccount {
     pub pubkey: String,
     pub account: Account,

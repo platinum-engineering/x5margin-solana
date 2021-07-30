@@ -24,7 +24,7 @@ struct Request {
 struct JsonRpcResponse<T> {
     jsonrpc: String,
     id: i64,
-    result: RpcResponse<T>,
+    result: T,
 }
 
 impl SolanaApiClient {
@@ -49,9 +49,11 @@ impl SolanaApiClient {
             .await?;
 
         let body = r.bytes().await?;
-        let body: JsonRpcResponse<T> = serde_json::from_slice(&body)?;
+        let body: serde_json::Value = serde_json::from_slice(&body)?;
+        log::info!("{}", body);
+        let body: JsonRpcResponse<T> = serde_json::from_value(body)?;
 
-        Ok(body.result.value)
+        Ok(body.result)
     }
 }
 
@@ -62,14 +64,15 @@ impl Client for SolanaApiClient {
         account: solana_api_types::Pubkey,
         cfg: Option<solana_api_types::RpcAccountInfoConfig>,
     ) -> Result<solana_api_types::Account, solana_api_types::ClientError> {
-        let account: UiAccount = self
+        let r: RpcResponse<UiAccount> = self
             .mk_request(Request {
                 method: "getAccountInfo",
                 params: serde_json::json!([account.to_string(), serde_json::to_value(&cfg)?,]),
             })
             .await?;
 
-        let account = account
+        let account = r
+            .value
             .decode()
             .ok_or_else(|| RpcError::ParseError("failed to decode account".to_string()))?;
 
@@ -81,7 +84,14 @@ impl Client for SolanaApiClient {
         program: solana_api_types::Pubkey,
         cfg: Option<solana_api_types::RpcProgramAccountsConfig>,
     ) -> Result<Vec<solana_api_types::RpcKeyedAccount>, solana_api_types::ClientError> {
-        todo!()
+        let r = self
+            .mk_request(Request {
+                method: "getProgramAccounts",
+                params: serde_json::json!([program.to_string(), serde_json::to_value(&cfg)?,]),
+            })
+            .await?;
+
+        Ok(r)
     }
 
     async fn get_multiple_accounts(
@@ -161,14 +171,18 @@ pub async fn run() -> Result<JsValue, JsValue> {
     };
 
     let pubkey = Pubkey::try_from("4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA").unwrap();
-    let r = client.get_account_info(pubkey, None).await;
-    let r = match r {
-        Ok(a) => JsValue::from_serde(&a).unwrap(),
-        Err(err) => {
-            let err = format!("{:?}", err);
-            JsValue::from_str(&err)
-        }
-    };
+    let r = client
+        .get_account_info(pubkey, None)
+        .await
+        .map_err(|err| JsValue::from_str(err.to_string().as_str()))?;
+    let r = JsValue::from_serde(&r).unwrap();
+
+    let pubkey = Pubkey::try_from("4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T").unwrap();
+    let r = client
+        .get_program_accounts(pubkey, None)
+        .await
+        .map_err(|err| JsValue::from_str(err.to_string().as_str()))?;
+    let r = JsValue::from_serde(&r).unwrap();
 
     Ok(r)
 }
