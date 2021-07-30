@@ -146,6 +146,8 @@ pub struct Account {
     pub executable: bool,
     /// the epoch at which this account will next owe rent
     pub rent_epoch: Epoch,
+    /// public key of the account
+    pub pubkey: Pubkey,
 }
 
 /// An atomic transaction
@@ -180,7 +182,7 @@ pub struct UiAccount {
 }
 
 impl UiAccount {
-    pub fn decode(&self) -> Option<Account> {
+    pub fn decode(&self, pubkey: Pubkey) -> Option<Account> {
         let data = match &self.data {
             UiAccountData::Json(_) => None,
             UiAccountData::LegacyBinary(blob) => bs58::decode(blob).into_vec().ok(),
@@ -210,6 +212,7 @@ impl UiAccount {
             owner: Pubkey::from_str(&self.owner).ok()?,
             executable: self.executable,
             rent_epoch: self.rent_epoch,
+            pubkey,
         })
     }
 }
@@ -302,7 +305,7 @@ pub struct RpcProgramAccountsConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RpcKeyedAccount {
     pub pubkey: String,
-    pub account: Account,
+    pub account: UiAccount,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -581,7 +584,7 @@ pub trait Client {
         &self,
         program: Pubkey,
         cfg: Option<RpcProgramAccountsConfig>,
-    ) -> Result<Vec<RpcKeyedAccount>, ClientError>;
+    ) -> Result<Vec<Account>, ClientError>;
 
     /// https://docs.solana.com/developing/clients/jsonrpc-api#getmultipleaccounts
     async fn get_multiple_accounts(

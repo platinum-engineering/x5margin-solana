@@ -17,6 +17,7 @@ serde_bytes = "0.11"
 serde_derive = "^1.0"
 serde_json = "1.0"
 thiserror = "1.0"
+# zstd не билдится под wasm, поэтому нашел реализацию декодера на чистом расте.
 # zstd = {version = "0.5", features = ["wasm"]}
 ruzstd = "0.2"
 
