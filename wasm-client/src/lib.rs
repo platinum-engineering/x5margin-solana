@@ -10,7 +10,7 @@ use wasm_bindgen::prelude::*;
 
 use solana_api_types::{
     Client, ClientError, Pubkey, RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse,
-    UiAccount, UiAccountEncoding,
+    RpcSignatureStatusConfig, Signature, TransactionStatus, UiAccount, UiAccountEncoding,
 };
 
 struct SolanaApiClient {
@@ -131,10 +131,18 @@ impl Client for SolanaApiClient {
 
     async fn get_signature_statuses(
         &self,
-        signatures: &[solana_api_types::Signature],
-        cfg: solana_api_types::RpcSignatureStatusConfig,
-    ) -> Result<Vec<solana_api_types::Account>, solana_api_types::ClientError> {
-        todo!()
+        signatures: &[Signature],
+        cfg: Option<solana_api_types::RpcSignatureStatusConfig>,
+    ) -> Result<Vec<Option<TransactionStatus>>, solana_api_types::ClientError> {
+        let signatures: Vec<String> = signatures.iter().map(|s| s.to_string()).collect();
+        let r: RpcResponse<Vec<Option<TransactionStatus>>> = self
+            .mk_request(Request {
+                method: "getSignatureStatuses",
+                params: serde_json::json!([signatures, serde_json::to_value(&cfg)?,]),
+            })
+            .await?;
+
+        Ok(r.value)
     }
 
     async fn get_signatures_for_address(
@@ -154,7 +162,7 @@ impl Client for SolanaApiClient {
 
     async fn get_transaction(
         &self,
-        signature: solana_api_types::Signature,
+        signature: Signature,
         cfg: Option<solana_api_types::RpcTransactionConfig>,
     ) -> Result<Option<solana_api_types::EncodedConfirmedTransaction>, solana_api_types::ClientError>
     {
@@ -166,7 +174,7 @@ impl Client for SolanaApiClient {
         pubkey: &solana_api_types::Pubkey,
         lamports: u64,
         commitment: Option<solana_api_types::CommitmentConfig>,
-    ) -> Result<solana_api_types::Signature, solana_api_types::ClientError> {
+    ) -> Result<Signature, solana_api_types::ClientError> {
         todo!()
     }
 
@@ -174,7 +182,7 @@ impl Client for SolanaApiClient {
         &self,
         transaction: &solana_api_types::Transaction,
         cfg: solana_api_types::RpcSendTransactionConfig,
-    ) -> Result<solana_api_types::Signature, solana_api_types::ClientError> {
+    ) -> Result<Signature, solana_api_types::ClientError> {
         todo!()
     }
 
@@ -201,15 +209,13 @@ pub async fn run() -> Result<JsValue, JsValue> {
     let r = client
         .get_account_info(pubkey, None)
         .await
-        .map_err(|err| JsValue::from_str(err.to_string().as_str()))?;
-    let r = JsValue::from_serde(&r).unwrap();
+        .map_err(|err| err.to_string())?;
 
     let pubkey = Pubkey::try_from("4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T").unwrap();
     let r = client
         .get_program_accounts(pubkey, None)
         .await
-        .map_err(|err| JsValue::from_str(err.to_string().as_str()))?;
-    let r = JsValue::from_serde(&r).unwrap();
+        .map_err(|err| err.to_string())?;
 
     let accounts = &[
         Pubkey::try_from("vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg").unwrap(),
@@ -225,8 +231,22 @@ pub async fn run() -> Result<JsValue, JsValue> {
             }),
         )
         .await
-        .map_err(|err| JsValue::from_str(err.to_string().as_str()))?;
-    let r = JsValue::from_serde(&r).unwrap();
+        .map_err(|err| err.to_string())?;
 
+    let signatures = &[
+        Signature::try_from("5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW").unwrap(),
+        Signature::try_from("5j7s6NiJS3JAkvgkoc18WVAsiSaci2pxB2A6ueCJP4tprA2TFg9wSyTLeYouxPBJEMzJinENTkpA52YStRW5Dia7").unwrap(),
+    ];
+    let r = client
+        .get_signature_statuses(
+            signatures,
+            Some(RpcSignatureStatusConfig {
+                search_transaction_history: true,
+            }),
+        )
+        .await
+        .map_err(|err| err.to_string())?;
+
+    let r = JsValue::from_serde(&r).unwrap();
     Ok(r)
 }
