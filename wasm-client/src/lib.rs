@@ -4,9 +4,10 @@ use std::{
 };
 
 use async_trait::async_trait;
+use serde::{de::DeserializeOwned, Deserialize};
 use wasm_bindgen::prelude::*;
 
-use solana_api_types::{Client, ClientError, Pubkey};
+use solana_api_types::{Client, ClientError, Pubkey, RpcError, RpcResponse, UiAccount};
 
 struct SolanaApiClient {
     client: reqwest::Client,
@@ -19,8 +20,15 @@ struct Request {
     params: serde_json::Value,
 }
 
+#[derive(Deserialize, Debug)]
+struct JsonRpcResponse<T> {
+    jsonrpc: String,
+    id: i64,
+    result: RpcResponse<T>,
+}
+
 impl SolanaApiClient {
-    async fn mk_request(&self, r: Request) -> Result<serde_json::Value, ClientError> {
+    async fn mk_request<T: DeserializeOwned>(&self, r: Request) -> Result<T, ClientError> {
         let id = self.current_id.fetch_add(1, Ordering::SeqCst);
 
         let request = serde_json::json!({
@@ -41,9 +49,9 @@ impl SolanaApiClient {
             .await?;
 
         let body = r.bytes().await?;
-        let body = serde_json::from_slice(&body)?;
+        let body: JsonRpcResponse<T> = serde_json::from_slice(&body)?;
 
-        Ok(body)
+        Ok(body.result.value)
     }
 }
 
@@ -54,19 +62,16 @@ impl Client for SolanaApiClient {
         account: solana_api_types::Pubkey,
         cfg: Option<solana_api_types::RpcAccountInfoConfig>,
     ) -> Result<solana_api_types::Account, solana_api_types::ClientError> {
-        let r = self
+        let account: UiAccount = self
             .mk_request(Request {
                 method: "getAccountInfo",
-                params: serde_json::json!([
-                    // TODO: fix this
-                    // serde_json::to_value(&account)?,
-                    "4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA",
-                    serde_json::to_value(&cfg)?,
-                ]),
+                params: serde_json::json!([account.to_string(), serde_json::to_value(&cfg)?,]),
             })
             .await?;
 
-        let account = serde_json::from_value(r)?;
+        let account = account
+            .decode()
+            .ok_or_else(|| RpcError::ParseError("failed to decode account".to_string()))?;
 
         Ok(account)
     }
@@ -124,7 +129,7 @@ impl Client for SolanaApiClient {
         pubkey: &solana_api_types::Pubkey,
         lamports: u64,
         commitment: Option<solana_api_types::CommitmentConfig>,
-    ) -> Result<String, solana_api_types::ClientError> {
+    ) -> Result<solana_api_types::Signature, solana_api_types::ClientError> {
         todo!()
     }
 
@@ -132,7 +137,7 @@ impl Client for SolanaApiClient {
         &self,
         transaction: &solana_api_types::Transaction,
         cfg: solana_api_types::RpcSendTransactionConfig,
-    ) -> Result<String, solana_api_types::ClientError> {
+    ) -> Result<solana_api_types::Signature, solana_api_types::ClientError> {
         todo!()
     }
 
@@ -147,6 +152,8 @@ impl Client for SolanaApiClient {
 
 #[wasm_bindgen]
 pub async fn run() -> Result<JsValue, JsValue> {
+    console_log::init().unwrap();
+
     let client = SolanaApiClient {
         client: reqwest::Client::new(),
         current_id: AtomicUsize::new(0),
@@ -156,9 +163,12 @@ pub async fn run() -> Result<JsValue, JsValue> {
     let pubkey = Pubkey::try_from("4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA").unwrap();
     let r = client.get_account_info(pubkey, None).await;
     let r = match r {
-        Ok(a) => String::from("account"),
-        Err(err) => format!("{:?}", err),
+        Ok(a) => JsValue::from_serde(&a).unwrap(),
+        Err(err) => {
+            let err = format!("{:?}", err);
+            JsValue::from_str(&err)
+        }
     };
 
-    Ok(JsValue::from_serde(&r).unwrap())
+    Ok(r)
 }
