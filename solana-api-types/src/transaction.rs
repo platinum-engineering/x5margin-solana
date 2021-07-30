@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::InstructionError;
+use crate::{InstructionError, Slot};
 
 /// Reasons a transaction might be rejected.
 #[derive(Error, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -83,3 +83,21 @@ pub enum TransactionError {
 }
 
 pub type Result<T> = std::result::Result<T, TransactionError>;
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TransactionConfirmationStatus {
+    Processed,
+    Confirmed,
+    Finalized,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransactionStatus {
+    pub slot: Slot,
+    pub confirmations: Option<usize>, // None = rooted
+    pub status: Result<()>,           // legacy field
+    pub err: Option<TransactionError>,
+    pub confirmation_status: Option<TransactionConfirmationStatus>,
+}

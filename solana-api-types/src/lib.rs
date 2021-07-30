@@ -17,7 +17,7 @@ pub use error::{ClientError, RpcError};
 pub use instruction::InstructionError;
 pub use pubkey::Pubkey;
 pub use signature::Signature;
-pub use transaction::TransactionError;
+pub use transaction::{TransactionError, TransactionStatus};
 
 /// Epoch is a unit of time a given leader schedule is honored,
 ///  some number of Slots.
@@ -597,8 +597,8 @@ pub trait Client {
     async fn get_signature_statuses(
         &self,
         signatures: &[Signature],
-        cfg: RpcSignatureStatusConfig,
-    ) -> Result<Vec<Account>, ClientError>;
+        cfg: Option<RpcSignatureStatusConfig>,
+    ) -> Result<Vec<Option<TransactionStatus>>, ClientError>;
 
     /// https://docs.solana.com/developing/clients/jsonrpc-api#getsignaturesforaddress
     async fn get_signatures_for_address(
