@@ -2,3 +2,4 @@
 # js/wasm stuff
 node_modules/
 pkg/
+rust-toolchain

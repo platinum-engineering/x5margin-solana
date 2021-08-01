@@ -7,7 +7,8 @@ members = [
     "program-so",
     "disassembler",
     "wasm-client",
-    "solana-api-types"
+    "solana-api-types",
+    "jsonrpc-client"
 ]
 
 [profile.bpf-release]
