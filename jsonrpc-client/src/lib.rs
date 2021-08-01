@@ -34,7 +34,7 @@ impl SolanaApiClient {
     async fn mk_request<T: DeserializeOwned>(
         &self, r: Request
     ) -> Result<T, ClientError> {
-        
+
         let id = self.current_id.fetch_add(1, Ordering::SeqCst);
 
         let request = serde_json::json!({
@@ -158,7 +158,15 @@ impl Client for SolanaApiClient {
         address: &solana_api_types::Pubkey,
         cfg: solana_api_types::RpcSignaturesForAddressConfig,
     ) -> Result<Vec<solana_api_types::SignatureInfo>, solana_api_types::ClientError> {
-        todo!()
+
+        let r: RpcResponse<Vec<solana_api_types::SignatureInfo>> = self
+            .mk_request(Request {
+                method: "getSignaturesForAddress",
+                params: serde_json::json!([address.to_string(), serde_json::to_value(&cfg)?,]),
+            })
+            .await?;
+
+        Ok(r.value)
     }
 
     async fn get_slot(
@@ -312,6 +320,25 @@ mod tests {
             )
             .await
             .map_err(|err| err.to_string());
+
+        println!("{:?}", r);
+    }
+
+    #[tokio::test]
+    async fn get_signatures_for_address_test() {
+
+        let client = SolanaApiClient {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: "https://api.devnet.solana.com",
+        };
+
+        let pubkey = solana_api_types::Pubkey::try_from("13LeFbG6m2EP1fqCj9k66fcXsoTHMMtgr7c78AivUrYD").unwrap();
+       
+        let r = client
+        .get_account_info(pubkey, None)
+        .await
+        .map_err(|err| err.to_string());
 
         println!("{:?}", r);
     }
