@@ -31,7 +31,10 @@ struct JsonRpcResponse<T> {
 }
 
 impl SolanaApiClient {
-    async fn mk_request<T: DeserializeOwned>(&self, r: Request) -> Result<T, ClientError> {
+    async fn mk_request<T: DeserializeOwned>(
+        &self, r: Request
+    ) -> Result<T, ClientError> {
+        
         let id = self.current_id.fetch_add(1, Ordering::SeqCst);
 
         let request = serde_json::json!({
@@ -67,6 +70,7 @@ impl Client for SolanaApiClient {
         account: solana_api_types::Pubkey,
         cfg: Option<solana_api_types::RpcAccountInfoConfig>,
     ) -> Result<solana_api_types::Account, solana_api_types::ClientError> {
+
         let r: RpcResponse<UiAccount> = self
             .mk_request(Request {
                 method: "getAccountInfo",
@@ -87,6 +91,7 @@ impl Client for SolanaApiClient {
         program: solana_api_types::Pubkey,
         cfg: Option<solana_api_types::RpcProgramAccountsConfig>,
     ) -> Result<Vec<solana_api_types::Account>, solana_api_types::ClientError> {
+
         let r: Vec<RpcKeyedAccount> = self
             .mk_request(Request {
                 method: "getProgramAccounts",
@@ -110,7 +115,9 @@ impl Client for SolanaApiClient {
         accounts: &[solana_api_types::Pubkey],
         cfg: Option<solana_api_types::RpcAccountInfoConfig>,
     ) -> Result<Vec<solana_api_types::Account>, solana_api_types::ClientError> {
+
         let accounts_as_str: Vec<String> = accounts.iter().map(|a| a.to_string()).collect();
+
         let r: RpcResponse<Vec<Option<UiAccount>>> = self
             .mk_request(Request {
                 method: "getMultipleAccounts",
@@ -133,7 +140,9 @@ impl Client for SolanaApiClient {
         signatures: &[Signature],
         cfg: Option<solana_api_types::RpcSignatureStatusConfig>,
     ) -> Result<Vec<Option<TransactionStatus>>, solana_api_types::ClientError> {
+
         let signatures: Vec<String> = signatures.iter().map(|s| s.to_string()).collect();
+
         let r: RpcResponse<Vec<Option<TransactionStatus>>> = self
             .mk_request(Request {
                 method: "getSignatureStatuses",
