@@ -31,6 +31,7 @@ struct JsonRpcResponse<T> {
 }
 
 impl SolanaApiClient {
+
     async fn mk_request<T: DeserializeOwned>(
         &self, r: Request
     ) -> Result<T, ClientError> {
@@ -181,10 +182,8 @@ impl Client for SolanaApiClient {
                 params: serde_json::json!([serde_json::to_value(&cfg)?,]),
             })
             .await?;
-        
-            let res = u64::from(r);
 
-        Ok(res)
+        Ok(r)
     }
 
     async fn get_transaction(
@@ -202,7 +201,17 @@ impl Client for SolanaApiClient {
         lamports: u64,
         commitment: Option<solana_api_types::CommitmentConfig>,
     ) -> Result<Signature, solana_api_types::ClientError> {
-        todo!()
+
+        let r: String = self
+            .mk_request(Request {
+                method: "requestAirdrop",
+                params: serde_json::json!([pubkey.to_string(), lamports]),
+            })
+            .await?;
+
+        let signature = Signature::from_str(&r).unwrap();
+
+        Ok(signature)
     }
 
     async fn send_transaction(
@@ -372,6 +381,25 @@ mod tests {
        
         let r = client
         .get_slot(None)
+        .await
+        .map_err(|err| err.to_string());
+
+        println!("{:?}", r);
+    }
+
+    #[tokio::test]
+    async fn request_airdrop_test() {
+
+        let client = SolanaApiClient {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: "https://api.devnet.solana.com",
+        };
+
+        let pubkey = solana_api_types::Pubkey::try_from("13LeFbG6m2EP1fqCj9k66fcXsoTHMMtgr7c78AivUrYD").unwrap();
+       
+        let r = client
+        .request_airdrop(&pubkey, 1000000000, None)
         .await
         .map_err(|err| err.to_string());
 
