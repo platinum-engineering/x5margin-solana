@@ -10,7 +10,7 @@ use wasm_bindgen::prelude::*;
 
 use solana_api_types::{
     Client, ClientError, Pubkey, RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse,
-    RpcSignatureStatusConfig, RpcSignaturesForAddressConfig, Signature, SignatureInfo,
+    RpcSignatureStatusConfig, RpcSignaturesForAddressConfig, Signature, SignatureInfo, Slot,
     TransactionStatus, UiAccount, UiAccountEncoding,
 };
 
@@ -164,8 +164,15 @@ impl Client for SolanaApiClient {
     async fn get_slot(
         &self,
         cfg: Option<solana_api_types::RpcSlotConfig>,
-    ) -> Result<solana_api_types::Slot, solana_api_types::ClientError> {
-        todo!()
+    ) -> Result<Slot, solana_api_types::ClientError> {
+        let r: Slot = self
+            .mk_request(Request {
+                method: "getSlot",
+                params: serde_json::json!([serde_json::to_value(&cfg)?]),
+            })
+            .await?;
+
+        Ok(r)
     }
 
     async fn get_transaction(
@@ -266,6 +273,8 @@ pub async fn run() -> Result<JsValue, JsValue> {
         )
         .await
         .map_err(|err| err.to_string())?;
+
+    let r = client.get_slot(None).await.map_err(|err| err.to_string())?;
 
     let r = JsValue::from_serde(&r).unwrap();
     Ok(r)
