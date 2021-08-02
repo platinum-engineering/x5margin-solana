@@ -8,7 +8,13 @@ use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Deserialize};
 use wasm_bindgen::prelude::*;
 
-use solana_api_types::{Client, ClientError, CommitmentConfig, EncodedConfirmedTransaction, Pubkey, RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse, RpcSendTransactionConfig, RpcSignatureStatusConfig, RpcSignaturesForAddressConfig, RpcTransactionConfig, Signature, SignatureInfo, Slot, Transaction, TransactionStatus, UiAccount, UiAccountEncoding, UiTransactionEncoding};
+use solana_api_types::{
+    Client, ClientError, CommitmentConfig, EncodedConfirmedTransaction, Message, Pubkey,
+    RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse, RpcSendTransactionConfig,
+    RpcSignatureStatusConfig, RpcSignaturesForAddressConfig, RpcSimulateTransactionConfig,
+    RpcSimulateTransactionResult, RpcTransactionConfig, Signature, SignatureInfo, Slot,
+    Transaction, TransactionStatus, UiAccount, UiAccountEncoding, UiTransactionEncoding,
+};
 
 struct SolanaApiClient {
     client: reqwest::Client,
@@ -212,7 +218,7 @@ impl Client for SolanaApiClient {
     async fn send_transaction(
         &self,
         transaction: &solana_api_types::Transaction,
-        cfg: solana_api_types::RpcSendTransactionConfig,
+        cfg: RpcSendTransactionConfig,
     ) -> Result<Signature, solana_api_types::ClientError> {
         let encoding = cfg.encoding.unwrap_or_default();
         let transaction = transaction.encode(encoding)?;
@@ -242,7 +248,23 @@ impl Client for SolanaApiClient {
         transaction: &solana_api_types::Transaction,
         cfg: solana_api_types::RpcSimulateTransactionConfig,
     ) -> Result<solana_api_types::RpcSimulateTransactionResult, solana_api_types::ClientError> {
-        todo!()
+        let encoding = cfg.encoding.unwrap_or_default();
+        let commitment = cfg.commitment.unwrap_or_default();
+        let cfg = RpcSimulateTransactionConfig {
+            commitment: Some(commitment),
+            encoding: Some(encoding),
+            ..cfg
+        };
+
+        let transaction = transaction.encode(encoding)?;
+        let r: RpcResponse<RpcSimulateTransactionResult> = self
+            .mk_request(Request {
+                method: "simulateTransaction",
+                params: serde_json::json!([transaction, serde_json::to_value(&cfg)?]),
+            })
+            .await?;
+
+        Ok(r.value)
     }
 }
 
@@ -334,6 +356,20 @@ pub async fn run() -> Result<JsValue, JsValue> {
         .map_err(|err| err.to_string())?;
 
     // TODO: send_transaction
+    let transaction = Transaction {
+        signatures: vec![],
+        message: Message::default(),
+    };
+    let r = client
+        .simulate_transaction(
+            &transaction,
+            RpcSimulateTransactionConfig {
+                encoding: Some(UiTransactionEncoding::Base58),
+                ..Default::default()
+            },
+        )
+        .await
+        .map_err(|err| err.to_string())?;
 
     let r = JsValue::from_serde(&r).unwrap();
     Ok(r)
