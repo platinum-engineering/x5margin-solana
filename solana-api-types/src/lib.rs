@@ -328,7 +328,7 @@ pub struct RpcSignaturesForAddressConfig {
 #[serde(rename_all = "camelCase")]
 pub struct SignatureInfo {
     pub signature: String,
-    pub slog: u64,
+    pub slot: Slot,
     pub err: Option<TransactionError>,
     pub memo: Option<String>,
     pub block_time: Option<i64>,
@@ -604,7 +604,7 @@ pub trait Client {
     async fn get_signatures_for_address(
         &self,
         address: &Pubkey,
-        cfg: RpcSignaturesForAddressConfig,
+        cfg: Option<RpcSignaturesForAddressConfig>,
     ) -> Result<Vec<SignatureInfo>, ClientError>;
 
     /// https://docs.solana.com/developing/clients/jsonrpc-api#getslot

@@ -10,7 +10,8 @@ use wasm_bindgen::prelude::*;
 
 use solana_api_types::{
     Client, ClientError, Pubkey, RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse,
-    RpcSignatureStatusConfig, Signature, TransactionStatus, UiAccount, UiAccountEncoding,
+    RpcSignatureStatusConfig, RpcSignaturesForAddressConfig, Signature, SignatureInfo,
+    TransactionStatus, UiAccount, UiAccountEncoding,
 };
 
 struct SolanaApiClient {
@@ -65,7 +66,7 @@ impl SolanaApiClient {
 impl Client for SolanaApiClient {
     async fn get_account_info(
         &self,
-        account: solana_api_types::Pubkey,
+        account: Pubkey,
         cfg: Option<solana_api_types::RpcAccountInfoConfig>,
     ) -> Result<solana_api_types::Account, solana_api_types::ClientError> {
         let r: RpcResponse<UiAccount> = self
@@ -85,7 +86,7 @@ impl Client for SolanaApiClient {
 
     async fn get_program_accounts(
         &self,
-        program: solana_api_types::Pubkey,
+        program: Pubkey,
         cfg: Option<solana_api_types::RpcProgramAccountsConfig>,
     ) -> Result<Vec<solana_api_types::Account>, solana_api_types::ClientError> {
         let r: Vec<RpcKeyedAccount> = self
@@ -108,7 +109,7 @@ impl Client for SolanaApiClient {
 
     async fn get_multiple_accounts(
         &self,
-        accounts: &[solana_api_types::Pubkey],
+        accounts: &[Pubkey],
         cfg: Option<solana_api_types::RpcAccountInfoConfig>,
     ) -> Result<Vec<solana_api_types::Account>, solana_api_types::ClientError> {
         let accounts_as_str: Vec<String> = accounts.iter().map(|a| a.to_string()).collect();
@@ -147,10 +148,17 @@ impl Client for SolanaApiClient {
 
     async fn get_signatures_for_address(
         &self,
-        address: &solana_api_types::Pubkey,
-        cfg: solana_api_types::RpcSignaturesForAddressConfig,
-    ) -> Result<Vec<solana_api_types::SignatureInfo>, solana_api_types::ClientError> {
-        todo!()
+        address: &Pubkey,
+        cfg: Option<RpcSignaturesForAddressConfig>,
+    ) -> Result<Vec<SignatureInfo>, solana_api_types::ClientError> {
+        let r: Vec<SignatureInfo> = self
+            .mk_request(Request {
+                method: "getSignaturesForAddress",
+                params: serde_json::json!([address.to_string(), serde_json::to_value(&cfg)?]),
+            })
+            .await?;
+
+        Ok(r)
     }
 
     async fn get_slot(
@@ -171,7 +179,7 @@ impl Client for SolanaApiClient {
 
     async fn request_airdrop(
         &self,
-        pubkey: &solana_api_types::Pubkey,
+        pubkey: &Pubkey,
         lamports: u64,
         commitment: Option<solana_api_types::CommitmentConfig>,
     ) -> Result<Signature, solana_api_types::ClientError> {
@@ -242,6 +250,18 @@ pub async fn run() -> Result<JsValue, JsValue> {
             signatures,
             Some(RpcSignatureStatusConfig {
                 search_transaction_history: true,
+            }),
+        )
+        .await
+        .map_err(|err| err.to_string())?;
+
+    let address = Pubkey::try_from("Vote111111111111111111111111111111111111111").unwrap();
+    let r = client
+        .get_signatures_for_address(
+            &address,
+            Some(RpcSignaturesForAddressConfig {
+                limit: Some(1),
+                ..Default::default()
             }),
         )
         .await
