@@ -283,8 +283,6 @@ mod tests {
     use super::{SolanaApiClient, Client};
 
     use solana_api_types::*;
-    use solana_sdk;
-
 
     fn create_sample_transaction() -> Transaction {
         Transaction {
