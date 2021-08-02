@@ -226,7 +226,27 @@ impl Client for SolanaApiClient {
         transaction: &solana_api_types::Transaction,
         cfg: solana_api_types::RpcSendTransactionConfig,
     ) -> Result<Signature, solana_api_types::ClientError> {
-        todo!()
+
+        let encoding = cfg.encoding.unwrap_or_default();
+        let transaction = transaction.encode(encoding)?;
+        let preflight_commitment = cfg.preflight_commitment.unwrap_or_default();
+
+        let cfg = RpcSendTransactionConfig {
+            preflight_commitment: Some(preflight_commitment),
+            encoding: Some(encoding),
+            ..cfg
+        };
+
+        let r: String = self
+            .mk_request(Request {
+                method: "sendTransaction",
+                params: serde_json::json!([transaction, serde_json::to_value(&cfg)?,]),
+            })
+            .await?;
+
+        let signature = Signature::from_str(&r).unwrap();
+
+        Ok(signature)
     }
 
     async fn simulate_transaction(
@@ -234,7 +254,24 @@ impl Client for SolanaApiClient {
         transaction: &solana_api_types::Transaction,
         cfg: solana_api_types::RpcSimulateTransactionConfig,
     ) -> Result<solana_api_types::RpcSimulateTransactionResult, solana_api_types::ClientError> {
-        todo!()
+        
+        let encoding = cfg.encoding.unwrap_or_default();
+        let commitment = cfg.commitment.unwrap_or_default();
+        let cfg = RpcSimulateTransactionConfig {
+            commitment: Some(commitment),
+            encoding: Some(encoding),
+            ..cfg
+        };
+
+        let transaction = transaction.encode(encoding)?;
+        let r: RpcResponse<RpcSimulateTransactionResult> = self
+            .mk_request(Request {
+                method: "simulateTransaction",
+                params: serde_json::json!([transaction, serde_json::to_value(&cfg)?]),
+            })
+            .await?;
+
+        Ok(r.value)
     }
 }
 
