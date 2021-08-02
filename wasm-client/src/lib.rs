@@ -8,12 +8,7 @@ use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Deserialize};
 use wasm_bindgen::prelude::*;
 
-use solana_api_types::{
-    Client, ClientError, EncodedConfirmedTransaction, Pubkey, RpcAccountInfoConfig, RpcError,
-    RpcKeyedAccount, RpcResponse, RpcSignatureStatusConfig, RpcSignaturesForAddressConfig,
-    RpcTransactionConfig, Signature, SignatureInfo, Slot, TransactionStatus, UiAccount,
-    UiAccountEncoding, UiTransactionEncoding,
-};
+use solana_api_types::{Client, ClientError, CommitmentConfig, EncodedConfirmedTransaction, Pubkey, RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse, RpcSendTransactionConfig, RpcSignatureStatusConfig, RpcSignaturesForAddressConfig, RpcTransactionConfig, Signature, SignatureInfo, Slot, Transaction, TransactionStatus, UiAccount, UiAccountEncoding, UiTransactionEncoding};
 
 struct SolanaApiClient {
     client: reqwest::Client,
@@ -219,7 +214,27 @@ impl Client for SolanaApiClient {
         transaction: &solana_api_types::Transaction,
         cfg: solana_api_types::RpcSendTransactionConfig,
     ) -> Result<Signature, solana_api_types::ClientError> {
-        todo!()
+        let encoding = cfg.encoding.unwrap_or_default();
+        let transaction = transaction.encode(encoding)?;
+        let preflight_commitment = cfg.preflight_commitment.unwrap_or_default();
+
+        let cfg = RpcSendTransactionConfig {
+            preflight_commitment: Some(preflight_commitment),
+            encoding: Some(encoding),
+            ..cfg
+        };
+
+        let r: String = self
+            .mk_request(Request {
+                method: "sendTransaction",
+                params: serde_json::json!([]),
+            })
+            .await?;
+
+        let signature =
+            Signature::from_str(&r).map_err(|err| RpcError::ParseError(err.to_string()))?;
+
+        Ok(signature)
     }
 
     async fn simulate_transaction(
@@ -317,6 +332,8 @@ pub async fn run() -> Result<JsValue, JsValue> {
         .request_airdrop(&pubkey, 1000000000, None)
         .await
         .map_err(|err| err.to_string())?;
+
+    // TODO: send_transaction
 
     let r = JsValue::from_serde(&r).unwrap();
     Ok(r)

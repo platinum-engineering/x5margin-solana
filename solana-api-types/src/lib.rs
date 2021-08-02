@@ -1,4 +1,4 @@
-use std::{io::Read, str::FromStr};
+use std::{fmt, io::Read, str::FromStr};
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -18,6 +18,8 @@ pub use instruction::InstructionError;
 pub use pubkey::Pubkey;
 pub use signature::Signature;
 pub use transaction::{TransactionError, TransactionStatus};
+
+use crate::error::ClientErrorKind;
 
 /// Epoch is a unit of time a given leader schedule is honored,
 ///  some number of Slots.
@@ -163,6 +165,26 @@ pub struct Transaction {
     pub message: Message,
 }
 
+impl Transaction {
+    pub fn encode(&self, encoding: UiTransactionEncoding) -> Result<String, ClientError> {
+        let serialized = bincode::serialize(self).map_err(|e| {
+            ClientErrorKind::Custom(format!("transaction serialization failed: {}", e))
+        })?;
+        let encoded = match encoding {
+            UiTransactionEncoding::Base58 => bs58::encode(serialized).into_string(),
+            UiTransactionEncoding::Base64 => base64::encode(serialized),
+            _ => {
+                return Err(ClientErrorKind::Custom(format!(
+                    "unsupported transaction encoding: {}. Supported encodings: base58, base64",
+                    encoding
+                ))
+                .into())
+            }
+        };
+        Ok(encoded)
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ParsedAccount {
@@ -244,6 +266,20 @@ pub enum UiTransactionEncoding {
     Base58,
     Json,
     JsonParsed,
+}
+
+impl Default for UiTransactionEncoding {
+    fn default() -> Self {
+        UiTransactionEncoding::Base64
+    }
+}
+
+impl fmt::Display for UiTransactionEncoding {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let v = serde_json::to_value(self).map_err(|_| fmt::Error)?;
+        let s = v.as_str().ok_or(fmt::Error)?;
+        write!(f, "{}", s)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
