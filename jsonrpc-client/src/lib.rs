@@ -65,6 +65,7 @@ impl SolanaApiClient {
 
 #[async_trait(?Send)]
 impl Client for SolanaApiClient {
+
     async fn get_account_info(
         &self,
         account: solana_api_types::Pubkey,
@@ -173,7 +174,17 @@ impl Client for SolanaApiClient {
         &self,
         cfg: Option<solana_api_types::RpcSlotConfig>,
     ) -> Result<solana_api_types::Slot, solana_api_types::ClientError> {
-        todo!()
+
+        let r: solana_api_types::Slot = self
+            .mk_request(Request {
+                method: "getSlot",
+                params: serde_json::json!([serde_json::to_value(&cfg)?,]),
+            })
+            .await?;
+        
+            let res = u64::from(r);
+
+        Ok(res)
     }
 
     async fn get_transaction(
@@ -334,9 +345,33 @@ mod tests {
         };
 
         let pubkey = solana_api_types::Pubkey::try_from("13LeFbG6m2EP1fqCj9k66fcXsoTHMMtgr7c78AivUrYD").unwrap();
+
+        let cfg = solana_api_types::RpcSignaturesForAddressConfig {
+            before: None, 
+            until: None,  
+            limit: None,
+            commitment: None,
+        };
        
         let r = client
-        .get_account_info(pubkey, None)
+        .get_signatures_for_address(&pubkey, cfg)
+        .await
+        .map_err(|err| err.to_string());
+
+        println!("{:?}", r);
+    }
+
+    #[tokio::test]
+    async fn get_slot_test() {
+
+        let client = SolanaApiClient {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: "https://api.devnet.solana.com",
+        };
+       
+        let r = client
+        .get_slot(None)
         .await
         .map_err(|err| err.to_string());
 
