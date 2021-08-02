@@ -221,7 +221,6 @@ impl Client for SolanaApiClient {
         cfg: RpcSendTransactionConfig,
     ) -> Result<Signature, solana_api_types::ClientError> {
         let encoding = cfg.encoding.unwrap_or_default();
-        let transaction = transaction.encode(encoding)?;
         let preflight_commitment = cfg.preflight_commitment.unwrap_or_default();
 
         let cfg = RpcSendTransactionConfig {
@@ -230,10 +229,12 @@ impl Client for SolanaApiClient {
             ..cfg
         };
 
+        let transaction = transaction.encode(encoding)?;
+
         let r: String = self
             .mk_request(Request {
                 method: "sendTransaction",
-                params: serde_json::json!([]),
+                params: serde_json::json!([transaction, serde_json::to_value(&cfg)?]),
             })
             .await?;
 
