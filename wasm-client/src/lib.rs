@@ -9,9 +9,10 @@ use serde::{de::DeserializeOwned, Deserialize};
 use wasm_bindgen::prelude::*;
 
 use solana_api_types::{
-    Client, ClientError, Pubkey, RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse,
-    RpcSignatureStatusConfig, RpcSignaturesForAddressConfig, Signature, SignatureInfo, Slot,
-    TransactionStatus, UiAccount, UiAccountEncoding,
+    Client, ClientError, EncodedConfirmedTransaction, Pubkey, RpcAccountInfoConfig, RpcError,
+    RpcKeyedAccount, RpcResponse, RpcSignatureStatusConfig, RpcSignaturesForAddressConfig,
+    RpcTransactionConfig, Signature, SignatureInfo, Slot, TransactionStatus, UiAccount,
+    UiAccountEncoding, UiTransactionEncoding,
 };
 
 struct SolanaApiClient {
@@ -179,9 +180,15 @@ impl Client for SolanaApiClient {
         &self,
         signature: Signature,
         cfg: Option<solana_api_types::RpcTransactionConfig>,
-    ) -> Result<Option<solana_api_types::EncodedConfirmedTransaction>, solana_api_types::ClientError>
-    {
-        todo!()
+    ) -> Result<Option<EncodedConfirmedTransaction>, solana_api_types::ClientError> {
+        let r: Option<EncodedConfirmedTransaction> = self
+            .mk_request(Request {
+                method: "getTransaction",
+                params: serde_json::json!([signature.to_string(), serde_json::to_value(&cfg)?]),
+            })
+            .await?;
+
+        Ok(r)
     }
 
     async fn request_airdrop(
@@ -275,6 +282,21 @@ pub async fn run() -> Result<JsValue, JsValue> {
         .map_err(|err| err.to_string())?;
 
     let r = client.get_slot(None).await.map_err(|err| err.to_string())?;
+
+    let signature = Signature::from_str(
+        "2nBhEBYYvfaAe16UMNqRHre4YNSskvuYgx3M6E4JP1oDYvZEJHvoPzyUidNgNX5r9sTyN1J9UxtbCXy2rqYcuyuv",
+    )
+    .unwrap();
+    let r = client
+        .get_transaction(
+            signature,
+            Some(RpcTransactionConfig {
+                encoding: Some(UiTransactionEncoding::Json),
+                ..Default::default()
+            }),
+        )
+        .await
+        .map_err(|err| err.to_string())?;
 
     let r = JsValue::from_serde(&r).unwrap();
     Ok(r)
