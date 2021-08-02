@@ -7,10 +7,7 @@ use std::{
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Deserialize};
 
-use solana_api_types::{
-    Client, ClientError, Pubkey, RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse,
-    RpcSignatureStatusConfig, Signature, TransactionStatus, UiAccount, UiAccountEncoding,
-};
+use solana_api_types::*;
 
 struct SolanaApiClient {
     client: reqwest::Client,
@@ -158,7 +155,7 @@ impl Client for SolanaApiClient {
     async fn get_signatures_for_address(
         &self,
         address: &solana_api_types::Pubkey,
-        cfg: solana_api_types::RpcSignaturesForAddressConfig,
+        cfg: Option<solana_api_types::RpcSignaturesForAddressConfig>,
     ) -> Result<Vec<solana_api_types::SignatureInfo>, solana_api_types::ClientError> {
 
         let r: RpcResponse<Vec<solana_api_types::SignatureInfo>> = self
@@ -285,6 +282,17 @@ mod tests {
 
     use super::{SolanaApiClient, Client};
 
+    use solana_api_types::*;
+    use solana_sdk;
+
+
+    fn create_sample_transaction() -> Transaction {
+        Transaction {
+            signatures: vec![],
+            message: Message::default(),
+        }
+    }
+
     #[tokio::test]
     async fn get_account_info_test() {
 
@@ -407,7 +415,7 @@ mod tests {
         };
        
         let r = client
-        .get_signatures_for_address(&pubkey, cfg)
+        .get_signatures_for_address(&pubkey, Some(cfg))
         .await
         .map_err(|err| err.to_string());
 
@@ -463,6 +471,56 @@ mod tests {
        
         let r = client
         .get_transaction(signature, None)
+        .await
+        .map_err(|err| err.to_string());
+
+        println!("{:?}", r);
+    }
+
+    #[tokio::test]
+    async fn send_transaction_test() {
+
+        let client = SolanaApiClient {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: "https://api.devnet.solana.com",
+        };
+
+        let transaction = create_sample_transaction();
+       
+        let r = client
+        .send_transaction(
+            &transaction,
+            RpcSendTransactionConfig {
+                encoding: Some(UiTransactionEncoding::Base58),
+                ..Default::default()
+            },
+        )
+        .await
+        .map_err(|err| err.to_string());
+
+        println!("{:?}", r);
+    }
+
+    #[tokio::test]
+    async fn simulate_transaction_test() {
+
+        let client = SolanaApiClient {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: "https://api.devnet.solana.com",
+        };
+
+        let transaction = create_sample_transaction();
+       
+        let r = client
+        .simulate_transaction(
+            &transaction,
+            RpcSimulateTransactionConfig {
+                encoding: Some(UiTransactionEncoding::Base58),
+                ..Default::default()
+            },
+        )
         .await
         .map_err(|err| err.to_string());
 
