@@ -197,7 +197,21 @@ impl Client for SolanaApiClient {
         lamports: u64,
         commitment: Option<solana_api_types::CommitmentConfig>,
     ) -> Result<Signature, solana_api_types::ClientError> {
-        todo!()
+        let r: String = self
+            .mk_request(Request {
+                method: "requestAirdrop",
+                params: serde_json::json!([
+                    pubkey.to_string(),
+                    lamports,
+                    serde_json::to_value(&commitment)?
+                ]),
+            })
+            .await?;
+
+        let signature =
+            Signature::from_str(&r).map_err(|err| RpcError::ParseError(err.to_string()))?;
+
+        Ok(signature)
     }
 
     async fn send_transaction(
@@ -295,6 +309,12 @@ pub async fn run() -> Result<JsValue, JsValue> {
                 ..Default::default()
             }),
         )
+        .await
+        .map_err(|err| err.to_string())?;
+
+    let pubkey = Pubkey::from_str("83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri").unwrap();
+    let r = client
+        .request_airdrop(&pubkey, 1000000000, None)
         .await
         .map_err(|err| err.to_string())?;
 
