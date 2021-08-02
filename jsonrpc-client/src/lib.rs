@@ -190,9 +190,16 @@ impl Client for SolanaApiClient {
         &self,
         signature: Signature,
         cfg: Option<solana_api_types::RpcTransactionConfig>,
-    ) -> Result<Option<solana_api_types::EncodedConfirmedTransaction>, solana_api_types::ClientError>
-    {
-        todo!()
+    ) -> Result<Option<solana_api_types::EncodedConfirmedTransaction>, solana_api_types::ClientError> {
+
+        let r: Option<solana_api_types::EncodedConfirmedTransaction> = self
+            .mk_request(Request {
+                method: "getTransaction",
+                params: serde_json::json!([signature.to_string(), serde_json::to_value(&cfg)?,]),
+            })
+            .await?;
+
+        Ok(r)
     }
 
     async fn request_airdrop(
@@ -405,4 +412,24 @@ mod tests {
 
         println!("{:?}", r);
     }
+
+    #[tokio::test]
+    async fn get_transaction_test() {
+
+        let client = SolanaApiClient {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: "https://api.devnet.solana.com",
+        };
+
+        let signature = solana_api_types::Signature::from_str("44pGayfTYPSMT31zdzsdRWovCzRv3AeMEJZ4Z83XzNbDmHyzVGN2LV6SGkqbkPQbgNWQmV9fVEtVV6nZCEgpa7E6").unwrap();
+       
+        let r = client
+        .get_transaction(signature, None)
+        .await
+        .map_err(|err| err.to_string());
+
+        println!("{:?}", r);
+    }
+
 }
