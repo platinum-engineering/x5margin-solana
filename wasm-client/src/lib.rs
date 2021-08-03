@@ -16,10 +16,22 @@ use solana_api_types::{
     Transaction, TransactionStatus, UiAccount, UiAccountEncoding, UiTransactionEncoding,
 };
 
-struct SolanaApiClient {
+#[wasm_bindgen]
+pub struct SolanaApiClient {
     client: reqwest::Client,
     current_id: AtomicUsize,
-    solana_api_url: &'static str,
+    solana_api_url: String,
+}
+
+#[wasm_bindgen]
+impl SolanaApiClient {
+    pub fn new(solana_api_url: &str) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: solana_api_url.to_string(),
+        }
+    }
 }
 
 struct Request {
@@ -48,7 +60,7 @@ impl SolanaApiClient {
 
         let r = self
             .client
-            .post(self.solana_api_url)
+            .post(&self.solana_api_url)
             .header("Accept", "application/json")
             .header("Content-Type", "application/json")
             .body(request)
@@ -273,11 +285,8 @@ impl Client for SolanaApiClient {
 pub async fn run() -> Result<JsValue, JsValue> {
     console_log::init().unwrap();
 
-    let client = SolanaApiClient {
-        client: reqwest::Client::new(),
-        current_id: AtomicUsize::new(0),
-        solana_api_url: "https://api.devnet.solana.com",
-    };
+    let api = "https://api.devnet.solana.com".to_string();
+    let client = SolanaApiClient::new(&api);
 
     let pubkey = Pubkey::try_from("4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA").unwrap();
     let r = client
