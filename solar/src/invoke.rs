@@ -45,6 +45,7 @@ struct SignerSeeds {
     len: u64,
 }
 
+#[cfg(target_arch = "bpf")]
 extern "C" {
     fn sol_invoke_signed_c(
         instruction_addr: *const Instruction,
@@ -53,6 +54,17 @@ extern "C" {
         signers_seeds_addr: *const SignerSeeds,
         signers_seeds_len: u64,
     ) -> u64;
+}
+
+#[cfg(not(target_arch = "bpf"))]
+unsafe fn sol_invoke_signed_c(
+    instruction_addr: *const Instruction,
+    account_infos_addr: *const Account,
+    account_infos_len: u64,
+    signers_seeds_addr: *const SignerSeeds,
+    signers_seeds_len: u64,
+) -> u64 {
+    unimplemented!()
 }
 
 pub struct Invoker<'a, const N: usize> {

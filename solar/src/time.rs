@@ -1,12 +1,22 @@
 use chrono::{DateTime, Duration, TimeZone, Utc};
 
-use borsh::{BorshDeserialize, BorshSerialize};
-
 #[repr(C)]
 #[derive(
-    Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, BorshDeserialize, BorshSerialize,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    minicbor::Encode,
+    minicbor::Decode,
+    parity_scale_codec::Encode,
+    parity_scale_codec::Decode,
 )]
+#[cbor(transparent)]
 pub struct SolTimestamp {
+    #[n(0)]
     ts: i64,
 }
 
@@ -38,9 +48,22 @@ impl From<DateTime<Utc>> for SolTimestamp {
 
 #[repr(C)]
 #[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, BorshDeserialize, BorshSerialize,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    minicbor::Encode,
+    minicbor::Decode,
+    parity_scale_codec::Encode,
+    parity_scale_codec::Decode,
 )]
+#[cbor(transparent)]
 pub struct SolDuration {
+    #[n(0)]
     value: i64,
 }
 

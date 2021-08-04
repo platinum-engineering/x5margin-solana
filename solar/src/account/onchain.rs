@@ -25,44 +25,54 @@ pub struct Account {
 }
 
 impl<'a> AccountFields for Account {
+    #[inline]
     fn key(&self) -> &Pubkey {
         unsafe { &*self.key }
     }
 
+    #[inline]
     fn owner(&self) -> &Pubkey {
         unsafe { &*self.owner }
     }
 
+    #[inline]
     fn is_signer(&self) -> bool {
         self.is_signer
     }
 
+    #[inline]
     fn is_writable(&self) -> bool {
         self.is_writable
     }
 
+    #[inline]
     fn is_executable(&self) -> bool {
         self.is_executable
     }
 
+    #[inline]
     fn lamports(&self) -> u64 {
         unsafe { *self.lamports }
     }
 
+    #[inline]
     fn rent_epoch(&self) -> u64 {
         self.rent_epoch
     }
 
+    #[inline]
     fn data(&self) -> &[u8] {
         unsafe { from_raw_parts(self.data, self.data_len) }
     }
 }
 
 impl AccountFieldsMut for Account {
+    #[inline]
     fn set_lamports(&mut self, value: u64) {
         unsafe { *self.lamports = value }
     }
 
+    #[inline]
     fn data_mut(&mut self) -> &mut [u8] {
         unsafe { from_raw_parts_mut(self.data, self.data_len) }
     }
@@ -71,10 +81,12 @@ impl AccountFieldsMut for Account {
 impl<'a> AccountBackend for &'a mut Account {
     type Impl = Account;
 
+    #[inline]
     fn backend(&self) -> &Self::Impl {
         self
     }
 
+    #[inline]
     fn backend_mut(&mut self) -> &mut Self::Impl {
         self
     }
@@ -121,16 +133,19 @@ pub trait AsAccount {
 }
 
 impl AsAccount for Account {
+    #[inline]
     fn as_account_ref(&self) -> &Account {
         self
     }
 
+    #[inline]
     fn as_account_mut(&mut self) -> &mut Account {
         self
     }
 }
 
 impl AsPubkey for Account {
+    #[inline]
     fn as_pubkey(&self) -> &Pubkey {
         self.key()
     }
@@ -140,11 +155,13 @@ impl<T> AsAccount for T
 where
     T: AccountBackend<Impl = Account>,
 {
+    #[inline]
     fn as_account_ref(&self) -> &Account {
-        todo!()
+        self.backend()
     }
 
+    #[inline]
     fn as_account_mut(&mut self) -> &mut Account {
-        todo!()
+        self.backend_mut()
     }
 }

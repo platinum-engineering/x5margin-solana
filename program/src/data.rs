@@ -4,7 +4,7 @@ use solana_program::{pubkey::Pubkey, rent::Rent, sysvar::Sysvar};
 use solar::{
     account::{AccountBackend, AccountFields, AccountFieldsMut},
     reinterpret::{reinterpret_mut_unchecked, reinterpret_unchecked},
-    util::ResultExt,
+    util::{is_rent_exempt_fixed_arithmetic, minimum_balance, ResultExt},
 };
 
 use crate::error::Error;
@@ -20,6 +20,7 @@ macro_rules! impl_entity_simple_deref {
         {
             type Target = $target;
 
+            #[inline]
             fn deref(&self) -> &Self::Target {
                 unsafe { solar::reinterpret::reinterpret_unchecked(self.body()) }
             }
@@ -30,6 +31,7 @@ macro_rules! impl_entity_simple_deref {
             B: solar::account::AccountBackend,
             B::Impl: solar::account::AccountFieldsMut,
         {
+            #[inline]
             fn deref_mut(&mut self) -> &mut Self::Target {
                 unsafe { solar::reinterpret::reinterpret_mut_unchecked(self.body_mut()) }
             }
@@ -41,6 +43,11 @@ pub trait AccountType {
     const KIND: EntityKind;
 
     fn is_valid_size(size: usize) -> bool;
+    fn default_size() -> usize;
+
+    fn default_lamports() -> u64 {
+        minimum_balance(Self::default_size() as u64)
+    }
 }
 
 #[repr(transparent)]
@@ -200,8 +207,13 @@ where
         self.root() == other.root() && self.parent_id() == other.id()
     }
 
+    #[inline(never)]
     pub fn is_rent_exempt(&self, rent: &Rent) -> bool {
-        rent.is_exempt(self.account().lamports(), self.account().data().len())
+        is_rent_exempt_fixed_arithmetic(
+            rent,
+            self.account().lamports(),
+            self.account().data().len() as u64,
+        )
     }
 }
 

@@ -25,6 +25,7 @@ use std::{
 use solana_program::pubkey::Pubkey;
 
 /// Checks if the given byte slice satisfies the size and alignment requirements of the target type `T`.
+#[inline(always)]
 pub fn is_valid_for_type<T>(data: &[u8]) -> bool {
     data.len() >= size_of::<T>() && (data.as_ptr() as usize) % align_of::<T>() == 0
 }
@@ -35,6 +36,7 @@ pub fn is_valid_for_type<T>(data: &[u8]) -> bool {
 ///
 /// # Safety
 /// `data` must be a valid representation of object `T`
+#[inline(always)]
 pub unsafe fn try_reinterpret<T>(data: &[u8]) -> Option<&T> {
     if is_valid_for_type::<T>(data) {
         Some(reinterpret_unchecked(data))
@@ -51,6 +53,7 @@ pub unsafe fn try_reinterpret<T>(data: &[u8]) -> Option<&T> {
 /// `data` must be a valid representation of object `T`
 ///
 /// Unlike [`try_reinterpret`], this function does not check size or alignment.
+#[inline(always)]
 pub unsafe fn reinterpret_unchecked<T>(data: &[u8]) -> &T {
     &*(data.as_ptr() as *const T)
 }
@@ -61,6 +64,7 @@ pub unsafe fn reinterpret_unchecked<T>(data: &[u8]) -> &T {
 ///
 /// # Safety
 /// `data` must be a valid representation of object `T`
+#[inline(always)]
 pub unsafe fn try_reinterpret_mut<T>(data: &mut [u8]) -> Option<&mut T> {
     if is_valid_for_type::<T>(data) {
         Some(reinterpret_mut_unchecked(data))
@@ -77,6 +81,7 @@ pub unsafe fn try_reinterpret_mut<T>(data: &mut [u8]) -> Option<&mut T> {
 /// `data` must be a valid representation of object `T`
 ///
 /// Unlike [`try_reinterpret_mut`], this function does not check size or alignment.
+#[inline(always)]
 pub unsafe fn reinterpret_mut_unchecked<T>(data: &mut [u8]) -> &mut T {
     &mut *(data.as_mut_ptr() as *mut T)
 }
@@ -87,6 +92,7 @@ pub unsafe fn reinterpret_mut_unchecked<T>(data: &mut [u8]) -> &mut T {
 ///
 /// # Safety
 /// `data` must be a valid representation of some number of objects `T`
+#[inline(always)]
 pub unsafe fn try_reinterpret_slice<T>(data: &[u8]) -> Option<&[T]> {
     if is_valid_for_type::<T>(data) {
         Some(reinterpret_slice_unchecked(data))
@@ -103,6 +109,7 @@ pub unsafe fn try_reinterpret_slice<T>(data: &[u8]) -> Option<&[T]> {
 /// `data` must be a valid representation of some number of objects `T`
 ///
 /// Unlike [`try_reinterpret_slice`], this function does not check for alignment or size.
+#[inline(always)]
 pub unsafe fn reinterpret_slice_unchecked<T>(data: &[u8]) -> &[T] {
     let count = data.len() / size_of::<T>();
 
@@ -115,6 +122,7 @@ pub unsafe fn reinterpret_slice_unchecked<T>(data: &[u8]) -> &[T] {
 ///
 /// # Safety
 /// `data` must be a valid representation of some number of objects `T`
+#[inline(always)]
 pub unsafe fn try_reinterpret_slice_mut<T>(data: &mut [u8]) -> Option<&mut [T]> {
     if is_valid_for_type::<T>(data) {
         Some(reinterpret_slice_mut_unchecked(data))
@@ -131,6 +139,7 @@ pub unsafe fn try_reinterpret_slice_mut<T>(data: &mut [u8]) -> Option<&mut [T]> 
 /// `data` must be a valid representation of some number of objects `T`
 ///
 /// Unlike [`try_reinterpret_slice_mut`], this function does not check for alignment or size.
+#[inline(always)]
 pub unsafe fn reinterpret_slice_mut_unchecked<T>(data: &mut [u8]) -> &mut [T] {
     let count = data.len() / size_of::<T>();
 

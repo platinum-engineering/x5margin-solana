@@ -10,11 +10,28 @@ use solana_program::{
     pubkey::Pubkey,
 };
 
-use crate::account::onchain::{Account, AccountRef};
+use crate::{
+    account::onchain::{Account, AccountRef},
+    prelude::AccountBackend,
+};
 
 pub const MAX_ACCOUNTS: usize = 32;
 
-pub struct ProgramInput {
+pub trait ProgramInput {
+    fn program_id(&self) -> &Pubkey;
+    fn data(&self) -> &[u8];
+
+    fn remaining(&self) -> usize;
+    fn len(&self) -> usize;
+    fn is_empty(&self) -> bool;
+}
+
+pub trait AccountSource<B: AccountBackend>: ProgramInput {
+    fn take_accounts<const N: usize>(&mut self) -> [B; N];
+    fn next_account(&mut self) -> B;
+}
+
+pub struct BpfProgramInput {
     program_id: &'static Pubkey,
     accounts: ProgramAccounts,
     data: &'static [u8],
@@ -39,7 +56,7 @@ struct SerializedAccount {
     data_len: u64,
 }
 
-impl ProgramInput {
+impl BpfProgramInput {
     /// Deserialize inputs to a BPF program invocation.
     ///
     /// This implementation is hand-optimized to produce minimal bytecode.
@@ -102,45 +119,43 @@ impl ProgramInput {
             cursor: 0,
         };
 
-        ProgramInput {
+        BpfProgramInput {
             program_id,
             accounts,
             data,
         }
     }
+}
 
-    pub fn program_id(&self) -> &'static Pubkey {
+impl ProgramInput for BpfProgramInput {
+    fn program_id(&self) -> &Pubkey {
         self.program_id
     }
 
-    pub fn data(&self) -> &'static [u8] {
+    fn data(&self) -> &[u8] {
         self.data
     }
 
-    pub fn accounts(&mut self) -> &mut ProgramAccounts {
-        &mut self.accounts
-    }
-
-    #[inline(always)]
-    pub fn take_accounts<const N: usize>(&mut self) -> [AccountRef; N] {
-        self.accounts.take_accounts::<N>()
-    }
-
-    #[inline(always)]
-    pub fn next_account(&mut self) -> AccountRef {
-        self.accounts.next_account()
-    }
-
-    pub fn remaining(&self) -> usize {
+    fn remaining(&self) -> usize {
         self.accounts.remaining()
     }
 
-    pub fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.accounts.len()
     }
 
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.accounts.is_empty()
+    }
+}
+
+impl AccountSource<AccountRef> for BpfProgramInput {
+    fn take_accounts<const N: usize>(&mut self) -> [AccountRef; N] {
+        self.accounts.take_accounts()
+    }
+
+    fn next_account(&mut self) -> AccountRef {
+        self.accounts.next_account()
     }
 }
 
@@ -203,7 +218,7 @@ impl ProgramAccounts {
 }
 
 pub trait Entrypoint {
-    fn call(input: ProgramInput) -> ProgramResult;
+    fn call(input: BpfProgramInput) -> ProgramResult;
 }
 
 pub fn wrapped_entrypoint<T: Entrypoint>(
@@ -241,7 +256,7 @@ pub fn wrapped_entrypoint<T: Entrypoint>(
         cursor: 0,
     };
 
-    let input = ProgramInput {
+    let input = BpfProgramInput {
         program_id: unsafe { &*(program_id as *const Pubkey) },
         accounts,
         data: unsafe { &*(data as *const [u8]) },

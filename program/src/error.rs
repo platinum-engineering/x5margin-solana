@@ -1,3 +1,4 @@
+use solana_program::program_error::ProgramError;
 use solar::spl::{SplReadError, TokenError};
 
 #[derive(Debug)]
@@ -25,5 +26,11 @@ impl From<SplReadError> for Error {
 impl From<TokenError> for Error {
     fn from(other: TokenError) -> Self {
         Self::TokenError(other)
+    }
+}
+
+impl From<Error> for ProgramError {
+    fn from(_: Error) -> Self {
+        todo!()
     }
 }

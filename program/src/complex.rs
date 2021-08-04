@@ -66,6 +66,10 @@ impl AccountType for Farm {
     fn is_valid_size(size: usize) -> bool {
         size >= STAKE_POOL_STATE_RESERVED
     }
+
+    fn default_size() -> usize {
+        todo!()
+    }
 }
 
 impl<B: AccountBackend> Deref for Entity<B, Farm> {

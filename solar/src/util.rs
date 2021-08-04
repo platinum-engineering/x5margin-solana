@@ -1,9 +1,10 @@
 use std::{borrow::Borrow, mem::size_of};
 
 use chrono::{DateTime, TimeZone, Utc};
-use solana_program::{clock::Clock, pubkey::Pubkey, sysvar::Sysvar};
+use fixed::{traits::ToFixed, types::U64F64};
+use solana_program::{clock::Clock, pubkey::Pubkey, rent::Rent, sysvar::Sysvar};
 
-use crate::{log::Loggable, mem::memcmp, qlog};
+use crate::{log::Loggable, math::Checked, mem::memcmp, qlog};
 
 #[macro_export]
 macro_rules! bytecode_marker {
@@ -209,10 +210,31 @@ pub fn is_zeroed(slice: &[u8]) -> bool {
     }
 }
 
-pub fn timestamp_now() -> i64 {
-    Clock::get().bpf_unwrap().unix_timestamp
+pub fn timestamp_now() -> Checked<i64> {
+    Clock::get().bpf_unwrap().unix_timestamp.into()
 }
 
 pub fn datetime_now() -> DateTime<Utc> {
-    Utc.timestamp(timestamp_now(), 0)
+    Utc.timestamp(timestamp_now().value(), 0)
+}
+
+pub fn minimum_balance(size: u64) -> u64 {
+    pub const ACCOUNT_STORAGE_OVERHEAD: u64 = 128;
+    let rent = Rent::default();
+    let exemption_threshold = rent.exemption_threshold.to_fixed::<U64F64>();
+    let per_year_cost =
+        ((ACCOUNT_STORAGE_OVERHEAD + size) * rent.lamports_per_byte_year).to_fixed::<U64F64>();
+    let minimum_balance: u64 = (exemption_threshold * per_year_cost).to_num::<u64>();
+
+    minimum_balance
+}
+
+pub fn is_rent_exempt_fixed_arithmetic(rent: &Rent, lamports: u64, size: u64) -> bool {
+    pub const ACCOUNT_STORAGE_OVERHEAD: u64 = 128;
+    let exemption_threshold = rent.exemption_threshold.to_fixed::<U64F64>();
+    let per_year_cost =
+        ((ACCOUNT_STORAGE_OVERHEAD + size) * rent.lamports_per_byte_year).to_fixed::<U64F64>();
+    let minimum_balance: u64 = (exemption_threshold * per_year_cost).to_num::<u64>();
+
+    lamports >= minimum_balance
 }

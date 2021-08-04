@@ -1,27 +1,104 @@
 use std::{
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
     panic::Location,
 };
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use az::CheckedCast;
 
-use num_traits::PrimInt;
+use fixed::{
+    traits::{Fixed, ToFixed},
+    types::{I64F64, U64F64},
+};
+use num_traits::{
+    Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedNeg, CheckedRem, CheckedShl, CheckedShr,
+    CheckedSub, One, Zero,
+};
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, BorshSerialize, BorshDeserialize)]
+pub trait CheckedNum:
+    Bounded
+    + Zero
+    + One
+    + CheckedAdd
+    + CheckedMul
+    + CheckedDiv
+    + CheckedNeg
+    + CheckedRem
+    + CheckedShl
+    + CheckedShr
+    + CheckedSub
+    + Copy
+    + Clone
+{
+}
+
+impl<
+        T: Bounded
+            + Zero
+            + One
+            + CheckedAdd
+            + CheckedMul
+            + CheckedDiv
+            + CheckedNeg
+            + CheckedRem
+            + CheckedShl
+            + CheckedShr
+            + CheckedSub
+            + Copy
+            + Clone,
+    > CheckedNum for T
+{
+}
+
+pub trait ToChecked: CheckedNum {
+    fn to_checked(self) -> Checked<Self>;
+}
+
+impl<T: CheckedNum> ToChecked for T {
+    fn to_checked(self) -> Checked<Self> {
+        Checked { inner: self }
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    PartialOrd,
+    Eq,
+    Ord,
+    minicbor::Encode,
+    minicbor::Decode,
+    parity_scale_codec::Encode,
+    parity_scale_codec::Decode,
+)]
 #[repr(transparent)]
-pub struct Checked<T: PrimInt> {
+#[cbor(transparent)]
+pub struct Checked<T: CheckedNum> {
+    #[n(0)]
     inner: T,
 }
 
-impl<T: PrimInt> Checked<T> {
+impl<T: CheckedNum> Checked<T> {
     pub fn value(self) -> T {
         self.inner
     }
 }
 
-impl<T: PrimInt> From<T> for Checked<T> {
+impl<T: CheckedNum> From<T> for Checked<T> {
     fn from(v: T) -> Self {
         Self { inner: v }
+    }
+}
+
+impl<T, U> CheckedCast<Checked<U>> for Checked<T>
+where
+    T: Fixed + CheckedNum,
+    U: CheckedNum,
+    T: CheckedCast<U>,
+{
+    fn checked_cast(self) -> Option<Checked<U>> {
+        self.value().checked_cast().map(Checked::from)
     }
 }
 
@@ -52,7 +129,7 @@ macro_rules! overflow_guard {
 
 macro_rules! impl_op {
     ($trait:ident, $assign_trait:ident, $method:ident, $assign_method:ident, $impl:expr) => {
-        impl<T: PrimInt> $trait for Checked<T> {
+        impl<T: CheckedNum> $trait for Checked<T> {
             type Output = Self;
 
             #[track_caller]
@@ -63,7 +140,7 @@ macro_rules! impl_op {
             }
         }
 
-        impl<T: PrimInt> $trait<T> for Checked<T> {
+        impl<T: CheckedNum> $trait<T> for Checked<T> {
             type Output = Self;
 
             #[track_caller]
@@ -74,7 +151,7 @@ macro_rules! impl_op {
             }
         }
 
-        impl<T: PrimInt> $assign_trait for Checked<T> {
+        impl<T: CheckedNum> $assign_trait for Checked<T> {
             #[track_caller]
             #[inline]
             #[allow(clippy::all)]
@@ -83,7 +160,7 @@ macro_rules! impl_op {
             }
         }
 
-        impl<T: PrimInt> $assign_trait<T> for Checked<T> {
+        impl<T: CheckedNum> $assign_trait<T> for Checked<T> {
             #[track_caller]
             #[inline]
             #[allow(clippy::all)]
@@ -99,25 +176,51 @@ impl_op!(Add, AddAssign, add, add_assign, |a: T, b| a.checked_add(&b));
 impl_op!(Mul, MulAssign, mul, mul_assign, |a: T, b| a.checked_mul(&b));
 impl_op!(Div, DivAssign, div, div_assign, |a: T, b| a.checked_div(&b));
 
-pub struct FixedPoint128 {
-    int: u64,
-    frac: u64,
+impl<T: CheckedNum> Neg for Checked<T> {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        overflow_guard!(self.inner.checked_neg()).into()
+    }
 }
 
-impl Mul for FixedPoint128 {
-    type Output = FixedPoint128;
+impl<T: ToFixed + CheckedNum> ToFixed for Checked<T> {
+    fn to_fixed<F: fixed::traits::Fixed>(self) -> F {
+        self.inner.to_fixed()
+    }
 
-    fn mul(self, rhs: Self) -> Self::Output {
-        let mut result = 0;
+    fn checked_to_fixed<F: fixed::traits::Fixed>(self) -> Option<F> {
+        self.inner.checked_to_fixed()
+    }
 
-        result += ((self.int as u128) * (rhs.int as u128)) << 64;
-        result += (self.int as u128) * (rhs.frac as u128);
-        result += (self.frac as u128) * (rhs.int as u128);
-        result += ((self.frac as u128) * (rhs.frac as u128)) >> 64;
+    fn saturating_to_fixed<F: fixed::traits::Fixed>(self) -> F {
+        self.inner.saturating_to_fixed()
+    }
 
-        let int = (result >> 64) as u64;
-        let frac = (result << 64 >> 64) as u64;
+    fn wrapping_to_fixed<F: fixed::traits::Fixed>(self) -> F {
+        self.inner.wrapping_to_fixed()
+    }
 
-        Self { int, frac }
+    fn overflowing_to_fixed<F: fixed::traits::Fixed>(self) -> (F, bool) {
+        self.inner.overflowing_to_fixed()
+    }
+}
+
+pub trait ToF64 {
+    fn to_u64f64(self) -> Checked<U64F64>;
+    fn to_i64f64(self) -> Checked<I64F64>;
+}
+
+impl<T: ToFixed> ToF64 for T {
+    #[inline]
+    #[track_caller]
+    fn to_u64f64(self) -> Checked<U64F64> {
+        overflow_guard!(self.checked_to_fixed::<U64F64>()).into()
+    }
+
+    #[inline]
+    #[track_caller]
+    fn to_i64f64(self) -> Checked<I64F64> {
+        overflow_guard!(self.checked_to_fixed::<I64F64>()).into()
     }
 }

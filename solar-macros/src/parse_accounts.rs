@@ -103,7 +103,7 @@ pub fn parse_accounts(input: proc_macro::TokenStream) -> proc_macro::TokenStream
 
         if is_writable {
             new_stmts.push(parse_quote! {
-                if solar::account::AccountFields::is_writable(solar::account::AccountBackend::backend(&#ident)) {
+                if !solar::account::AccountFields::is_writable(solar::account::AccountBackend::backend(&#ident)) {
                     solar::qlog!("cannot load `", stringify!(#ident), "` because it is read-only, but expected writable (len = ", input.len(), ")");
                     panic!("cannot load");
                 }
