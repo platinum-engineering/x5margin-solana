@@ -392,6 +392,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "console_log"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "501a375961cef1a0d44767200e66e4a559283097e91d0730b1d75dfb2f8a1494"
+dependencies = [
+ "log",
+ "web-sys",
+]
+
+[[package]]
 name = "constant_time_eq"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2149,6 +2159,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61b3909d758bb75c79f23d4736fac9433868679d3ad2ea7a61e3c25cfda9a088"
 
 [[package]]
+name = "ruzstd"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8cada0ef59efa6a5f4dc5e491f93d9f31e3fc7758df421ff1de8a706338e1100"
+dependencies = [
+ "byteorder",
+ "twox-hash",
+]
+
+[[package]]
 name = "ryu"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2388,10 +2408,12 @@ version = "0.1.0"
 dependencies = [
  "assert_matches",
  "async-trait",
+ "base64 0.12.3",
  "bincode",
  "bs58 0.4.0",
  "generic-array 0.14.4",
  "reqwest",
+ "ruzstd",
  "serde",
  "serde_bytes",
  "serde_derive",
@@ -3360,6 +3382,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
 
 [[package]]
+name = "twox-hash"
+version = "1.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04f8ab788026715fa63b31960869617cba39117e520eb415b0139543e325ab59"
+dependencies = [
+ "cfg-if 0.1.10",
+ "static_assertions",
+]
+
+[[package]]
 name = "typenum"
 version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3556,6 +3588,8 @@ name = "wasm-client"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "console_log",
+ "log",
  "reqwest",
  "serde",
  "serde_derive",

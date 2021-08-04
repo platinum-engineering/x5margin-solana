@@ -1,3 +1,5 @@
+use std::{fmt, io::Read, str::FromStr};
+
 use async_trait::async_trait;
 use serde_json::Value;
 
@@ -11,11 +13,13 @@ mod short_vec;
 mod signature;
 mod transaction;
 
-pub use error::ClientError;
+pub use error::{ClientError, RpcError};
 pub use instruction::InstructionError;
 pub use pubkey::Pubkey;
 pub use signature::Signature;
-pub use transaction::TransactionError;
+pub use transaction::{TransactionError, TransactionStatus};
+
+use crate::error::ClientErrorKind;
 
 /// Epoch is a unit of time a given leader schedule is honored,
 ///  some number of Slots.
@@ -130,7 +134,7 @@ pub struct Message {
 
 /// An Account with data that is stored on chain
 #[repr(C)]
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Default)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Default, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
     /// lamports in the account
@@ -144,6 +148,8 @@ pub struct Account {
     pub executable: bool,
     /// the epoch at which this account will next owe rent
     pub rent_epoch: Epoch,
+    /// public key of the account
+    pub pubkey: Pubkey,
 }
 
 /// An atomic transaction
@@ -157,6 +163,26 @@ pub struct Transaction {
 
     /// The message to sign.
     pub message: Message,
+}
+
+impl Transaction {
+    pub fn encode(&self, encoding: UiTransactionEncoding) -> Result<String, ClientError> {
+        let serialized = bincode::serialize(self).map_err(|e| {
+            ClientErrorKind::Custom(format!("transaction serialization failed: {}", e))
+        })?;
+        let encoded = match encoding {
+            UiTransactionEncoding::Base58 => bs58::encode(serialized).into_string(),
+            UiTransactionEncoding::Base64 => base64::encode(serialized),
+            _ => {
+                return Err(ClientErrorKind::Custom(format!(
+                    "unsupported transaction encoding: {}. Supported encodings: base58, base64",
+                    encoding
+                ))
+                .into())
+            }
+        };
+        Ok(encoded)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -177,9 +203,46 @@ pub struct UiAccount {
     pub rent_epoch: Epoch,
 }
 
+impl UiAccount {
+    pub fn decode(&self, pubkey: Pubkey) -> Option<Account> {
+        let data = match &self.data {
+            UiAccountData::Json(_) => None,
+            UiAccountData::LegacyBinary(blob) => bs58::decode(blob).into_vec().ok(),
+            UiAccountData::Binary(blob, encoding) => match encoding {
+                UiAccountEncoding::Base58 => bs58::decode(blob).into_vec().ok(),
+                UiAccountEncoding::Base64 => base64::decode(blob).ok(),
+                UiAccountEncoding::Base64Zstd => base64::decode(blob)
+                    .ok()
+                    .map(|zstd_data| {
+                        let mut rdr = std::io::BufReader::new(zstd_data.as_slice());
+                        let mut data = vec![];
+
+                        ruzstd::StreamingDecoder::new(&mut rdr)
+                            .and_then(|mut reader| {
+                                reader.read_to_end(&mut data).map_err(|err| err.to_string())
+                            })
+                            .map(|_| data)
+                            .ok()
+                    })
+                    .flatten(),
+                UiAccountEncoding::Binary | UiAccountEncoding::JsonParsed => None,
+            },
+        }?;
+        Some(Account {
+            lamports: self.lamports,
+            data,
+            owner: Pubkey::from_str(&self.owner).ok()?,
+            executable: self.executable,
+            rent_epoch: self.rent_epoch,
+            pubkey,
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", untagged)]
 pub enum UiAccountData {
+    LegacyBinary(String), // Legacy. Retained for RPC backwards compatibility
     Json(ParsedAccount),
     Binary(String, UiAccountEncoding),
 }
@@ -203,6 +266,20 @@ pub enum UiTransactionEncoding {
     Base58,
     Json,
     JsonParsed,
+}
+
+impl Default for UiTransactionEncoding {
+    fn default() -> Self {
+        UiTransactionEncoding::Base64
+    }
+}
+
+impl fmt::Display for UiTransactionEncoding {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let v = serde_json::to_value(self).map_err(|_| fmt::Error)?;
+        let s = v.as_str().ok_or(fmt::Error)?;
+        write!(f, "{}", s)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -261,9 +338,10 @@ pub struct RpcProgramAccountsConfig {
     pub with_context: Option<bool>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RpcKeyedAccount {
     pub pubkey: String,
-    pub account: Account,
+    pub account: UiAccount,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -286,7 +364,7 @@ pub struct RpcSignaturesForAddressConfig {
 #[serde(rename_all = "camelCase")]
 pub struct SignatureInfo {
     pub signature: String,
-    pub slog: u64,
+    pub slot: Slot,
     pub err: Option<TransactionError>,
     pub memo: Option<String>,
     pub block_time: Option<i64>,
@@ -517,6 +595,17 @@ pub struct RpcSimulateTransactionResult {
     pub accounts: Option<Vec<Option<UiAccount>>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RpcResponseContext {
+    pub slot: Slot,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RpcResponse<T> {
+    pub context: RpcResponseContext,
+    pub value: T,
+}
+
 #[async_trait(?Send)]
 pub trait Client {
     /// https://docs.solana.com/developing/clients/jsonrpc-api#getaccountinfo
@@ -531,7 +620,7 @@ pub trait Client {
         &self,
         program: Pubkey,
         cfg: Option<RpcProgramAccountsConfig>,
-    ) -> Result<Vec<RpcKeyedAccount>, ClientError>;
+    ) -> Result<Vec<Account>, ClientError>;
 
     /// https://docs.solana.com/developing/clients/jsonrpc-api#getmultipleaccounts
     async fn get_multiple_accounts(
@@ -544,14 +633,14 @@ pub trait Client {
     async fn get_signature_statuses(
         &self,
         signatures: &[Signature],
-        cfg: RpcSignatureStatusConfig,
-    ) -> Result<Vec<Account>, ClientError>;
+        cfg: Option<RpcSignatureStatusConfig>,
+    ) -> Result<Vec<Option<TransactionStatus>>, ClientError>;
 
     /// https://docs.solana.com/developing/clients/jsonrpc-api#getsignaturesforaddress
     async fn get_signatures_for_address(
         &self,
         address: &Pubkey,
-        cfg: RpcSignaturesForAddressConfig,
+        cfg: Option<RpcSignaturesForAddressConfig>,
     ) -> Result<Vec<SignatureInfo>, ClientError>;
 
     /// https://docs.solana.com/developing/clients/jsonrpc-api#getslot
@@ -570,14 +659,14 @@ pub trait Client {
         pubkey: &Pubkey,
         lamports: u64,
         commitment: Option<CommitmentConfig>,
-    ) -> Result<String, ClientError>;
+    ) -> Result<Signature, ClientError>;
 
     /// https://docs.solana.com/developing/clients/jsonrpc-api#sendtransaction
     async fn send_transaction(
         &self,
         transaction: &Transaction,
         cfg: RpcSendTransactionConfig,
-    ) -> Result<String, ClientError>;
+    ) -> Result<Signature, ClientError>;
 
     /// https://docs.solana.com/developing/clients/jsonrpc-api#simulatetransaction
     async fn simulate_transaction(

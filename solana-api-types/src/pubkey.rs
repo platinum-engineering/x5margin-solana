@@ -1,4 +1,4 @@
-use std::{convert::TryFrom, str::FromStr};
+use std::{convert::TryFrom, fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -16,8 +16,14 @@ impl Pubkey {
     }
 }
 
-impl std::fmt::Debug for Pubkey {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Debug for Pubkey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", bs58::encode(self.0).into_string())
+    }
+}
+
+impl fmt::Display for Pubkey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", bs58::encode(self.0).into_string())
     }
 }
