@@ -2671,6 +2671,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "solana-rpc-client"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bs58 0.4.0",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "solana-api-types",
+ "solana-sdk",
+ "tokio 1.8.1",
+]
+
+[[package]]
 name = "solana-runtime"
 version = "1.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

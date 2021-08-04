@@ -1,233 +1,528 @@
+use std::{
+    convert::TryFrom,
+    str::FromStr,
+    sync::atomic::{AtomicUsize, Ordering},
+};
+
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
-use serde_json::{Number, Value};
-use solana_sdk::account::Account;
-use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::Signer;
+use serde::{de::DeserializeOwned, Deserialize};
 
-pub type Epoch = u64;
+use solana_api_types::*;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct ParsedAccount {
-    pub program: String,
-    pub parsed: Value,
-    pub space: u64,
+struct SolanaApiClient {
+    client: reqwest::Client,
+    current_id: AtomicUsize,
+    solana_api_url: &'static str,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct UiAccount {
-    pub lamports: u64,
-    pub data: UiAccountData,
-    pub owner: String,
-    pub executable: bool,
-    pub rent_epoch: Epoch,
+struct Request {
+    method: &'static str,
+    params: serde_json::Value,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", untagged)]
-pub enum UiAccountData {
-    LegacyBinary(String), // Legacy. Retained for RPC backwards compatibility
-    Json(ParsedAccount),
-    Binary(String, UiAccountEncoding),
+#[derive(Deserialize, Debug)]
+struct JsonRpcResponse<T> {
+    jsonrpc: String,
+    id: i64,
+    result: T,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub enum UiAccountEncoding {
-    Binary, // Legacy. Retained for RPC backwards compatibility
-    Base58,
-    Base64,
-    JsonParsed,
-    #[serde(rename = "base64+zstd")]
-    Base64Zstd,
-}
+impl SolanaApiClient {
 
-#[derive(Serialize, Deserialize, Debug)]
-pub enum ErrorCode {
-    ParseError,
-    InvalidRequest,
-    MethodNotFound,
-    InvalidParams,
-    InternalError,
-    ServerError(i64),
-}
+    async fn mk_request<T: DeserializeOwned>(
+        &self, r: Request
+    ) -> Result<T, ClientError> {
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Error {
-    pub code: ErrorCode,
-    pub message: String,
-    pub data: Option<Value>,
-}
+        let id = self.current_id.fetch_add(1, Ordering::SeqCst);
 
-struct AccountSliceConfig {
-    offset: u64,
-    length: u64,
-}
-
-// https://docs.solana.com/developing/clients/jsonrpc-api#filters
-struct Memcmp {
-    offset: u64,
-    bytes: String,
-}
-
-struct AccountFilter {
-    data_size: u64,
-    memcmp: Memcmp,
-}
-
-#[async_trait]
-trait Client {
-    // https://docs.solana.com/developing/clients/jsonrpc-api#getaccountinfo
-    async fn get_account_info(
-        &self,
-        account: Pubkey,
-        slice: Option<AccountSliceConfig>,
-    ) -> Result<Account, Error>;
-
-    // https://docs.solana.com/developing/clients/jsonrpc-api#getprogramaccounts
-    async fn get_program_accounts(
-        &self, 
-        program: Pubkey, 
-        slice: Option<AccountSliceConfig>, 
-        filters: Option<&[AccountFilter]>
-    ) -> Result<Vec<Account>, Error>;
-    /*
-       // https://docs.solana.com/developing/clients/jsonrpc-api#getmultipleaccounts
-       async fn get_multiple_accounts(&self, accounts: &[Pubkey], slice: Option<AccountSliceConfig>) -> Result<Vec<Account>, Error>;
-
-       // https://docs.solana.com/developing/clients/jsonrpc-api#getprogramaccounts
-       async fn get_program_accounts(&self, program: Pubkey, slice: Option<AccountSliceConfig>, filters: Option<&[AccountFilter]>) -> Result<Vec<Account>, Error>;
-
-       // https://docs.solana.com/developing/clients/jsonrpc-api#getsignaturestatuses
-       async fn get_signature_statuses(&self, signatures: &[Signature], slice: Option<AccountSliceConfig>) -> Result<Vec<Account>, Error>;
-
-       // https://docs.solana.com/developing/clients/jsonrpc-api#getsignaturesforaddress
-       async fn get_signatures_for_address(&self, address: &Pubkey) -> Result<Vec<Account>, Error>;
-
-       // https://docs.solana.com/developing/clients/jsonrpc-api#getslot
-       async fn get_slot(&self, slice: Option<AccountSliceConfig>) -> u64;
-
-       // https://docs.solana.com/developing/clients/jsonrpc-api#gettransaction
-       async fn get_transaction(&self, program: Pubkey, commitment_config: CommitmentConfig, ) -> u64;
-
-       // https://docs.solana.com/developing/clients/jsonrpc-api#requestairdrop
-       async fn request_airdrop(&self, pubkey: &Pubkey, lamports: u64) -> u64;
-
-       // https://docs.solana.com/developing/clients/jsonrpc-api#sendtransaction
-       async fn send_transaction(&self, transaction: &Transaction) -> u64;
-
-       // https://docs.solana.com/developing/clients/jsonrpc-api#simulatetransaction
-       async fn simulate_transaction(&self, transaction: &Transaction,) -> u64;
-
-    */
-}
-
-struct RpcClient {}
-
-#[async_trait]
-impl Client for RpcClient {
-    async fn get_account_info(
-        &self,
-        account: Pubkey,
-        slice: Option<AccountSliceConfig>,
-    ) -> Result<Account, Error> {
-        let json = serde_json::json!({
+        let request = serde_json::json!({
             "jsonrpc": "2.0",
-            "id": 1,
-            "method": "getAccountInfo",
-            "params": [
-                "2VWq8XTcDZBvi8v3i8RHonoPP9w74oNDqUeXJortxCZh",
-                {
-                    "encoding": "jsonParsed"
-                }
-            ]
+            "id": id,
+            "method": r.method,
+            "params": r.params,
         });
+        let request = serde_json::to_vec(&request)?;
 
-        let client = reqwest::Client::new();
-        let response: serde_json::Value = client
-            .post("https://api.devnet.solana.com")
-            .json(&json)
+        let r = self
+            .client
+            .post(self.solana_api_url)
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .body(request)
             .send()
-            .await
-            .unwrap()
-            .json()
-            .await
-            .unwrap();
+            .await?;
 
-        println!("{:#?}", response["result"]["value"]);
+        let body = r.bytes().await?;
+        let body: serde_json::Value = serde_json::from_slice(&body)?;
+        println!("{}", body);
+        let body: JsonRpcResponse<T> = serde_json::from_value(body)?;
 
-        let acc: Account = serde_json::from_value(response["result"]["value"].clone()).unwrap();
+        Ok(body.result)
+    }
+}
 
-        println!("{:#?}", acc);
+#[async_trait(?Send)]
+impl Client for SolanaApiClient {
 
-        serde_json::from_value(response["result"]["value"].clone()).unwrap()
+    async fn get_account_info(
+        &self,
+        account: solana_api_types::Pubkey,
+        cfg: Option<solana_api_types::RpcAccountInfoConfig>,
+    ) -> Result<solana_api_types::Account, solana_api_types::ClientError> {
+
+        let r: RpcResponse<UiAccount> = self
+            .mk_request(Request {
+                method: "getAccountInfo",
+                params: serde_json::json!([account.to_string(), serde_json::to_value(&cfg)?,]),
+            })
+            .await?;
+
+        let account = r
+            .value
+            .decode(account)
+            .ok_or_else(|| RpcError::ParseError("failed to decode account".to_string()))?;
+
+        Ok(account)
     }
 
-    async fn get_program_accounts (
+    async fn get_program_accounts(
         &self,
-        account: Pubkey,
-        slice: Option<AccountSliceConfig>,
-        filters: Option<&[AccountFilter]>,
-    ) -> Result<Vec<Account>, Error> {
-        let json = serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "getProgramAccounts",
-            "params": ["SwaPpA9LAaLfeLi3a68M4DjnLqgtticKg6CnyNwgAC8"]
-        });
+        program: solana_api_types::Pubkey,
+        cfg: Option<solana_api_types::RpcProgramAccountsConfig>,
+    ) -> Result<Vec<solana_api_types::Account>, solana_api_types::ClientError> {
 
-        let client = reqwest::Client::new();
-        let response: serde_json::Value = client
-            .post("https://api.devnet.solana.com")
-            .json(&json)
-            .send()
-            .await
-            .unwrap()
-            .json()
-            .await
-            .unwrap();
+        let r: Vec<RpcKeyedAccount> = self
+            .mk_request(Request {
+                method: "getProgramAccounts",
+                params: serde_json::json!([program.to_string(), serde_json::to_value(&cfg)?,]),
+            })
+            .await?;
 
-        // let res: Result<Vec<Account>, Error> = serde_json::from_value(response["result"].clone())
-        //     .expect("some error");
+        let r = r
+            .into_iter()
+            .filter_map(|a| {
+                let pubkey = Pubkey::from_str(a.pubkey.as_str()).ok()?;
+                a.account.decode(pubkey)
+            })
+            .collect();
 
-        // for r in res.iter() {
-        //     println!("{:?}", r);
-        // }
+        Ok(r)
+    }
 
-        // return res;
+    async fn get_multiple_accounts(
+        &self,
+        accounts: &[solana_api_types::Pubkey],
+        cfg: Option<solana_api_types::RpcAccountInfoConfig>,
+    ) -> Result<Vec<solana_api_types::Account>, solana_api_types::ClientError> {
 
-        serde_json::from_value(response["result"].clone()).unwrap()
+        let accounts_as_str: Vec<String> = accounts.iter().map(|a| a.to_string()).collect();
+
+        let r: RpcResponse<Vec<Option<UiAccount>>> = self
+            .mk_request(Request {
+                method: "getMultipleAccounts",
+                params: serde_json::json!([accounts_as_str, serde_json::to_value(&cfg)?,]),
+            })
+            .await?;
+
+        let r = r
+            .value
+            .into_iter()
+            .zip(accounts)
+            .filter_map(|(acc, key)| acc?.decode(*key))
+            .collect();
+
+        Ok(r)
+    }
+
+    async fn get_signature_statuses(
+        &self,
+        signatures: &[Signature],
+        cfg: Option<solana_api_types::RpcSignatureStatusConfig>,
+    ) -> Result<Vec<Option<TransactionStatus>>, solana_api_types::ClientError> {
+
+        let signatures: Vec<String> = signatures.iter().map(|s| s.to_string()).collect();
+
+        let r: RpcResponse<Vec<Option<TransactionStatus>>> = self
+            .mk_request(Request {
+                method: "getSignatureStatuses",
+                params: serde_json::json!([signatures, serde_json::to_value(&cfg)?,]),
+            })
+            .await?;
+
+        Ok(r.value)
+    }
+
+    async fn get_signatures_for_address(
+        &self,
+        address: &solana_api_types::Pubkey,
+        cfg: Option<solana_api_types::RpcSignaturesForAddressConfig>,
+    ) -> Result<Vec<solana_api_types::SignatureInfo>, solana_api_types::ClientError> {
+
+        let r: RpcResponse<Vec<solana_api_types::SignatureInfo>> = self
+            .mk_request(Request {
+                method: "getSignaturesForAddress",
+                params: serde_json::json!([address.to_string(), serde_json::to_value(&cfg)?,]),
+            })
+            .await?;
+
+        Ok(r.value)
+    }
+
+    async fn get_slot(
+        &self,
+        cfg: Option<solana_api_types::RpcSlotConfig>,
+    ) -> Result<solana_api_types::Slot, solana_api_types::ClientError> {
+
+        let r: solana_api_types::Slot = self
+            .mk_request(Request {
+                method: "getSlot",
+                params: serde_json::json!([serde_json::to_value(&cfg)?,]),
+            })
+            .await?;
+
+        Ok(r)
+    }
+
+    async fn get_transaction(
+        &self,
+        signature: Signature,
+        cfg: Option<solana_api_types::RpcTransactionConfig>,
+    ) -> Result<Option<solana_api_types::EncodedConfirmedTransaction>, solana_api_types::ClientError> {
+
+        let r: Option<solana_api_types::EncodedConfirmedTransaction> = self
+            .mk_request(Request {
+                method: "getTransaction",
+                params: serde_json::json!([signature.to_string(), serde_json::to_value(&cfg)?,]),
+            })
+            .await?;
+
+        Ok(r)
+    }
+
+    async fn request_airdrop(
+        &self,
+        pubkey: &solana_api_types::Pubkey,
+        lamports: u64,
+        commitment: Option<solana_api_types::CommitmentConfig>,
+    ) -> Result<Signature, solana_api_types::ClientError> {
+
+        let r: String = self
+            .mk_request(Request {
+                method: "requestAirdrop",
+                params: serde_json::json!([pubkey.to_string(), lamports]),
+            })
+            .await?;
+
+        let signature = Signature::from_str(&r).unwrap();
+
+        Ok(signature)
+    }
+
+    async fn send_transaction(
+        &self,
+        transaction: &solana_api_types::Transaction,
+        cfg: solana_api_types::RpcSendTransactionConfig,
+    ) -> Result<Signature, solana_api_types::ClientError> {
+
+        let encoding = cfg.encoding.unwrap_or_default();
+        let transaction = transaction.encode(encoding)?;
+        let preflight_commitment = cfg.preflight_commitment.unwrap_or_default();
+
+        let cfg = RpcSendTransactionConfig {
+            preflight_commitment: Some(preflight_commitment),
+            encoding: Some(encoding),
+            ..cfg
+        };
+
+        let r: String = self
+            .mk_request(Request {
+                method: "sendTransaction",
+                params: serde_json::json!([transaction, serde_json::to_value(&cfg)?,]),
+            })
+            .await?;
+
+        let signature = Signature::from_str(&r).unwrap();
+
+        Ok(signature)
+    }
+
+    async fn simulate_transaction(
+        &self,
+        transaction: &solana_api_types::Transaction,
+        cfg: solana_api_types::RpcSimulateTransactionConfig,
+    ) -> Result<solana_api_types::RpcSimulateTransactionResult, solana_api_types::ClientError> {
+        
+        let encoding = cfg.encoding.unwrap_or_default();
+        let commitment = cfg.commitment.unwrap_or_default();
+        let cfg = RpcSimulateTransactionConfig {
+            commitment: Some(commitment),
+            encoding: Some(encoding),
+            ..cfg
+        };
+
+        let transaction = transaction.encode(encoding)?;
+        let r: RpcResponse<RpcSimulateTransactionResult> = self
+            .mk_request(Request {
+                method: "simulateTransaction",
+                params: serde_json::json!([transaction, serde_json::to_value(&cfg)?]),
+            })
+            .await?;
+
+        Ok(r.value)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Client, RpcClient};
-    use serde::Serialize;
-    use serde_json::Value;
-    use solana_sdk::account::Account;
+    use std::{
+        convert::TryFrom,
+        str::FromStr,
+        sync::atomic::{AtomicUsize, Ordering},
+    };
+
+    use super::{SolanaApiClient, Client};
+
+    use solana_api_types::*;
+
+    fn create_sample_transaction() -> Transaction {
+        Transaction {
+            signatures: vec![],
+            message: Message::default(),
+        }
+    }
 
     #[tokio::test]
     async fn get_account_info_test() {
-        let rpc_client = RpcClient {};
-        let arr = bs58::decode("2VWq8XTcDZBvi8v3i8RHonoPP9w74oNDqUeXJortxCZh")
-            .into_vec()
-            .unwrap();
-        let account = solana_sdk::pubkey::Pubkey::new(&arr);
-        let response = rpc_client.get_account_info(account, None).await;
-        println!("{:?}", response);
+
+        let client = SolanaApiClient {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: "https://api.devnet.solana.com",
+        };
+
+        let pubkey = solana_api_types::Pubkey::try_from("13LeFbG6m2EP1fqCj9k66fcXsoTHMMtgr7c78AivUrYD").unwrap();
+       
+        let r = client
+        .get_account_info(pubkey, None)
+        .await
+        .map_err(|err| err.to_string());
+
+        println!("{:?}", r);
     }
 
     #[tokio::test]
     async fn get_program_accounts_test() {
-        let rpc_client = RpcClient {};
-        let arr = bs58::decode("SwaPpA9LAaLfeLi3a68M4DjnLqgtticKg6CnyNwgAC8")
-            .into_vec()
-            .unwrap();
-        let account = solana_sdk::pubkey::Pubkey::new(&arr);
-        let response = rpc_client.get_program_accounts(account, None, None).await;
-        println!("{:#?}", response);
+
+        let client = SolanaApiClient {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: "https://api.devnet.solana.com",
+        };
+
+        let pubkey = solana_api_types::Pubkey::try_from("6TvznH3B2e3p2mbhufNBpgSrLx6UkgvxtVQvopEZ2kuH").unwrap();
+        let acccount_cfg = solana_api_types::RpcAccountInfoConfig {
+            encoding: Some(solana_api_types::UiAccountEncoding::Base64),
+            data_slice: None,
+            commitment: None,
+        };
+        let cfg = solana_api_types::RpcProgramAccountsConfig {
+            filters: None,
+            account_config: acccount_cfg,
+            with_context: None,
+        };
+
+        let r = client
+            .get_program_accounts(pubkey, Some(cfg))
+            .await
+            .map_err(|err| err.to_string());
+
+        println!("{:?}", r);
     }
+
+    #[tokio::test]
+    async fn get_multiple_accounts_test() {
+
+        let client = SolanaApiClient {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: "https://api.devnet.solana.com",
+        };
+
+        let accounts = &[
+            solana_api_types::Pubkey::try_from("9B5XszUGdMaxCZ7uSQhPzdks5ZQSmWxrmzCSvtJ6Ns6g").unwrap(),
+            solana_api_types::Pubkey::try_from("13LeFbG6m2EP1fqCj9k66fcXsoTHMMtgr7c78AivUrYD").unwrap(),
+    ];
+    let r = client
+        .get_multiple_accounts(
+            accounts,
+            Some(solana_api_types::RpcAccountInfoConfig {
+                encoding: Some(solana_api_types::UiAccountEncoding::Base64),
+                data_slice: None,
+                commitment: None,
+            }),
+        )
+        .await
+        .map_err(|err| err.to_string());
+
+        println!("{:?}", r);
+    }
+
+    #[tokio::test]
+    async fn get_signature_statuses_test () {
+
+        let client = SolanaApiClient {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: "https://api.devnet.solana.com",
+        };
+
+        let signatures = &[
+            solana_api_types::Signature::try_from("5eCvikyPBwCKDvyKAdrAfLh9RgmKKvu8x5KpVeuBAVugvnzqcfdFe9DWpSaqJUh4ncdU6VU3Nt7p2YWyoscivtRu").unwrap(),
+            solana_api_types::Signature::try_from("44pGayfTYPSMT31zdzsdRWovCzRv3AeMEJZ4Z83XzNbDmHyzVGN2LV6SGkqbkPQbgNWQmV9fVEtVV6nZCEgpa7E6").unwrap(),
+        ];
+
+        let r = client
+            .get_signature_statuses(
+                signatures,
+                Some(solana_api_types::RpcSignatureStatusConfig {
+                    search_transaction_history: false,
+                }),
+            )
+            .await
+            .map_err(|err| err.to_string());
+
+        println!("{:?}", r);
+    }
+
+    #[tokio::test]
+    async fn get_signatures_for_address_test() {
+
+        let client = SolanaApiClient {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: "https://api.devnet.solana.com",
+        };
+
+        let pubkey = solana_api_types::Pubkey::try_from("13LeFbG6m2EP1fqCj9k66fcXsoTHMMtgr7c78AivUrYD").unwrap();
+
+        let cfg = solana_api_types::RpcSignaturesForAddressConfig {
+            before: None, 
+            until: None,  
+            limit: None,
+            commitment: None,
+        };
+       
+        let r = client
+        .get_signatures_for_address(&pubkey, Some(cfg))
+        .await
+        .map_err(|err| err.to_string());
+
+        println!("{:?}", r);
+    }
+
+    #[tokio::test]
+    async fn get_slot_test() {
+
+        let client = SolanaApiClient {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: "https://api.devnet.solana.com",
+        };
+       
+        let r = client
+        .get_slot(None)
+        .await
+        .map_err(|err| err.to_string());
+
+        println!("{:?}", r);
+    }
+
+    #[tokio::test]
+    async fn request_airdrop_test() {
+
+        let client = SolanaApiClient {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: "https://api.devnet.solana.com",
+        };
+
+        let pubkey = solana_api_types::Pubkey::try_from("13LeFbG6m2EP1fqCj9k66fcXsoTHMMtgr7c78AivUrYD").unwrap();
+       
+        let r = client
+        .request_airdrop(&pubkey, 1000000000, None)
+        .await
+        .map_err(|err| err.to_string());
+
+        println!("{:?}", r);
+    }
+
+    #[tokio::test]
+    async fn get_transaction_test() {
+
+        let client = SolanaApiClient {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: "https://api.devnet.solana.com",
+        };
+
+        let signature = solana_api_types::Signature::from_str("44pGayfTYPSMT31zdzsdRWovCzRv3AeMEJZ4Z83XzNbDmHyzVGN2LV6SGkqbkPQbgNWQmV9fVEtVV6nZCEgpa7E6").unwrap();
+       
+        let r = client
+        .get_transaction(signature, None)
+        .await
+        .map_err(|err| err.to_string());
+
+        println!("{:?}", r);
+    }
+
+    #[tokio::test]
+    async fn send_transaction_test() {
+
+        let client = SolanaApiClient {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: "https://api.devnet.solana.com",
+        };
+
+        let transaction = create_sample_transaction();
+       
+        let r = client
+        .send_transaction(
+            &transaction,
+            RpcSendTransactionConfig {
+                encoding: Some(UiTransactionEncoding::Base58),
+                ..Default::default()
+            },
+        )
+        .await
+        .map_err(|err| err.to_string());
+
+        println!("{:?}", r);
+    }
+
+    #[tokio::test]
+    async fn simulate_transaction_test() {
+
+        let client = SolanaApiClient {
+            client: reqwest::Client::new(),
+            current_id: AtomicUsize::new(0),
+            solana_api_url: "https://api.devnet.solana.com",
+        };
+
+        let transaction = create_sample_transaction();
+       
+        let r = client
+        .simulate_transaction(
+            &transaction,
+            RpcSimulateTransactionConfig {
+                encoding: Some(UiTransactionEncoding::Base58),
+                ..Default::default()
+            },
+        )
+        .await
+        .map_err(|err| err.to_string());
+
+        println!("{:?}", r);
+    }
+
 }
