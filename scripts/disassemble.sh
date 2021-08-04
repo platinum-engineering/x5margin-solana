@@ -1,3 +1,5 @@
 SCRIPT_DIR=$(dirname "$0")
 $SCRIPT_DIR/build.sh
-rbpf -u disassembler -e $SCRIPT_DIR/../target/bpfel-unknown-unknown/bpf-release/platinum_trade.so > $SCRIPT_DIR/../disassembled.txt
+
+cd $SCRIPT_DIR/..
+cargo run --package bpf-disassembler -- target/bpfel-unknown-unknown/bpf-release/x5margin.so > disassembled.txt

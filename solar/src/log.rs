@@ -10,11 +10,12 @@
 use std::{mem::MaybeUninit, slice::from_raw_parts};
 
 use itoap::write_to_ptr;
+use solana_program::{log::sol_log, program_error::ProgramError};
 
 use crate::mem::memcpy;
 
 pub struct Logger<const S: usize> {
-    buf: MaybeUninit<[u8; S]>,
+    buf: [MaybeUninit<u8>; S],
     cursor: usize,
 }
 
@@ -51,7 +52,7 @@ impl<const S: usize> Logger<S> {
         } else {
             let buf = unsafe { from_raw_parts(self.buf.as_ptr().cast::<u8>(), self.cursor) };
             let output = String::from_utf8_lossy(buf);
-            println!("Program log: {}", output);
+            sol_log(&output);
         }
     }
 }
@@ -75,7 +76,7 @@ impl Loggable for &str {
 impl<const S: usize> Default for Logger<S> {
     fn default() -> Self {
         Logger {
-            buf: MaybeUninit::uninit(),
+            buf: MaybeUninit::uninit_array(),
             cursor: 0,
         }
     }
@@ -109,3 +110,36 @@ macro_rules! impl_loggable_int {
 }
 
 impl_loggable_int!(i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, usize, isize);
+
+impl Loggable for ProgramError {
+    fn push_to_logger<const S: usize>(&self, logger: &mut Logger<S>) {
+        if let ProgramError::Custom(code) = self {
+            logger.push_str("Custom(");
+            logger.push_int(*code);
+            logger.push_str(")");
+        } else {
+            let msg = match self {
+                ProgramError::InvalidArgument => "InvalidArgument",
+                ProgramError::InvalidInstructionData => "InvalidInstructionData",
+                ProgramError::InvalidAccountData => "InvalidAccountData",
+                ProgramError::AccountDataTooSmall => "AccountDataTooSmall",
+                ProgramError::InsufficientFunds => "InsufficientFunds",
+                ProgramError::IncorrectProgramId => "IncorrectProgramId",
+                ProgramError::MissingRequiredSignature => "MissingRequiredSignature",
+                ProgramError::AccountAlreadyInitialized => "AccountAlreadyInitialized",
+                ProgramError::UninitializedAccount => "UninitializedAccount",
+                ProgramError::NotEnoughAccountKeys => "NotEnoughAccountKeys",
+                ProgramError::AccountBorrowFailed => "AccountBorrowFailed",
+                ProgramError::MaxSeedLengthExceeded => "MaxSeedLengthExceeded",
+                ProgramError::InvalidSeeds => "InvalidSeeds",
+                ProgramError::BorshIoError(_) => "BorshIoError",
+                ProgramError::AccountNotRentExempt => "AccountNotRentExempt",
+                ProgramError::UnsupportedSysvar => "UnsupportedSysvar",
+                ProgramError::IllegalOwner => "IllegalOwner",
+                _ => unreachable!(),
+            };
+
+            logger.push_str(msg);
+        }
+    }
+}

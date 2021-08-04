@@ -63,12 +63,21 @@ fn main() {
     let exec = EBpfElf::<UserError, DefaultInstructionMeter>::load(config, &file).unwrap();
 
     let analysis = Analysis::from_executable(&exec);
+    let mut sizes = vec![];
 
+    let mut current_fn = "<N/A>".to_string();
+    let mut current_fn_size = 0;
     for insn in &analysis.instructions {
         let pc = insn.ptr;
         if let Some(cfg_node) = analysis.cfg_nodes.get(&pc) {
             let is_function = analysis.functions.contains_key(&pc);
             if is_function {
+                if current_fn_size > 0 {
+                    sizes.push((current_fn, current_fn_size));
+                }
+
+                current_fn = cfg_node.label.clone();
+                current_fn_size = 0;
                 println!();
             }
 
@@ -225,5 +234,20 @@ fn main() {
                 )
             }
         }
+
+        current_fn_size += 1;
+    }
+
+    let total_size: usize = sizes.iter().map(|(_, s)| *s).sum();
+
+    sizes.sort_by_key(|(_, s)| *s);
+    sizes.reverse();
+    println!();
+    println!();
+    println!("function sizes:");
+
+    for (label, size) in sizes {
+        let part = (size as f64 / total_size as f64) * 100.0;
+        println!("[{:.1}%] {}: {}", part, label, size);
     }
 }

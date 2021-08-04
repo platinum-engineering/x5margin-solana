@@ -1,22 +1,53 @@
-use std::{
-    marker::PhantomData,
-    mem::size_of,
-    ops::{Deref, DerefMut},
-};
+use std::marker::PhantomData;
 
-use solana_program::pubkey::Pubkey;
+use solana_program::{pubkey::Pubkey, rent::Rent, sysvar::Sysvar};
 use solar::{
-    account::{AccountBackend, AccountBackendMut},
-    data::{reinterpret_mut_unchecked, reinterpret_unchecked},
+    account::{AccountBackend, AccountFields, AccountFieldsMut},
+    reinterpret::{reinterpret_mut_unchecked, reinterpret_unchecked},
+    util::{is_rent_exempt_fixed_arithmetic, minimum_balance, ResultExt},
 };
 
 use crate::error::Error;
 
 pub const HEADER_RESERVED: usize = 96;
-pub const FARM_ROOT_RESERVED: usize = 512;
+
+#[macro_export]
+macro_rules! impl_entity_simple_deref {
+    ($entity:ident, $target:ident) => {
+        impl<B> std::ops::Deref for Entity<B, $entity>
+        where
+            B: solar::account::AccountBackend,
+        {
+            type Target = $target;
+
+            #[inline]
+            fn deref(&self) -> &Self::Target {
+                unsafe { solar::reinterpret::reinterpret_unchecked(self.body()) }
+            }
+        }
+
+        impl<B> std::ops::DerefMut for Entity<B, $entity>
+        where
+            B: solar::account::AccountBackend,
+            B::Impl: solar::account::AccountFieldsMut,
+        {
+            #[inline]
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                unsafe { solar::reinterpret::reinterpret_mut_unchecked(self.body_mut()) }
+            }
+        }
+    };
+}
 
 pub trait AccountType {
+    const KIND: EntityKind;
+
     fn is_valid_size(size: usize) -> bool;
+    fn default_size() -> usize;
+
+    fn default_lamports() -> u64 {
+        minimum_balance(Self::default_size() as u64)
+    }
 }
 
 #[repr(transparent)]
@@ -36,11 +67,15 @@ impl EntityId {
 }
 
 #[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum EntityKind {
-    None = 0,
-    Root = 1,
-    StakerRegistry = 2,
-    RequestQueue = 3,
+    None = 0x00,
+    Root = 0x01,
+    StakerRegistry = 0x02,
+    RequestQueue = 0x03,
+
+    SimpleStakePool = 0x10,
+    SimpleStakeTicket = 0x11,
 }
 
 #[repr(C)]
@@ -52,6 +87,7 @@ pub struct EntityHeader {
     pub kind: EntityKind,
 }
 
+#[derive(Debug)]
 pub struct Entity<B, T>
 where
     B: AccountBackend,
@@ -66,17 +102,7 @@ where
     B: AccountBackend,
     T: AccountType,
 {
-    /// Raw constructor for protocol entities.
-    ///
-    /// # Safety
-    ///
-    /// This function will validate basic requirements of `T`, such as the size of account data
-    /// and alignment, so it will not cause immediate UB if called with invalid inputs.
-    ///
-    /// *However*, consumers of this struct can rely on all instances of [`Entity`] to uphold
-    /// invariants required by `T`, so callers are required to ensure that this account is actually
-    /// an instance of account type `T` before returning it elsewhere.
-    pub(crate) unsafe fn raw(account: B) -> Result<Self, Error> {
+    pub(crate) fn raw_any(program_id: &Pubkey, account: B) -> Result<Self, Error> {
         let size = account.data().len();
 
         if size < HEADER_RESERVED || !T::is_valid_size(size - HEADER_RESERVED) {
@@ -89,14 +115,52 @@ where
             return Err(Error::InvalidAlignment);
         }
 
-        Ok(Self {
+        let entity = Self {
             account,
             _phantom: Default::default(),
-        })
+        };
+
+        if entity.account.owner() != program_id {
+            return Err(Error::InvalidOwner);
+        }
+
+        // require all entities to be rent-exempt to be valid
+        if !entity.is_rent_exempt(&Rent::get().bpf_unwrap()) {
+            return Err(Error::NotRentExempt);
+        }
+
+        Ok(entity)
+    }
+
+    /// Raw constructor for protocol entities.
+    ///
+    /// # Safety
+    ///
+    /// This function will validate basic requirements of `T`, such as the size of account data
+    /// and alignment, so it will not cause immediate UB if called with invalid inputs.
+    ///
+    /// *However*, consumers of this struct can rely on all instances of [`Entity`] to uphold
+    /// invariants required by `T`, so callers are required to ensure that this account is actually
+    /// an instance of account type `T` before returning it elsewhere.
+    pub(crate) fn raw_initialized(program_id: &Pubkey, account: B) -> Result<Self, Error> {
+        let entity = Self::raw_any(program_id, account)?;
+
+        if entity.header().kind != T::KIND {
+            return Err(Error::InvalidKind);
+        }
+
+        Ok(entity)
     }
 
     pub fn account(&self) -> &B {
         &self.account
+    }
+
+    pub fn account_mut(&mut self) -> &mut B
+    where
+        B: AccountFieldsMut,
+    {
+        &mut self.account
     }
 
     pub fn header(&self) -> &EntityHeader {
@@ -104,27 +168,52 @@ where
         unsafe { reinterpret_unchecked(data) }
     }
 
-    pub(crate) fn body(&self) -> &[u8] {
-        &self.account.data()[HEADER_RESERVED..]
-    }
-}
-
-impl<B, T> Entity<B, T>
-where
-    B: AccountBackendMut,
-    T: AccountType,
-{
-    pub fn account_mut(&mut self) -> &mut B {
-        &mut self.account
-    }
-
-    pub fn header_mut(&mut self) -> &mut EntityHeader {
+    pub fn header_mut(&mut self) -> &mut EntityHeader
+    where
+        B::Impl: AccountFieldsMut,
+    {
         let data = &mut self.account.data_mut()[..HEADER_RESERVED];
         unsafe { reinterpret_mut_unchecked(data) }
     }
 
-    pub(crate) fn body_mut(&mut self) -> &mut [u8] {
+    pub(crate) fn body(&self) -> &[u8] {
+        &self.account.data()[HEADER_RESERVED..]
+    }
+
+    pub(crate) fn body_mut(&mut self) -> &mut [u8]
+    where
+        B::Impl: AccountFieldsMut,
+    {
         &mut self.account.data_mut()[HEADER_RESERVED..]
+    }
+
+    pub fn id(&self) -> EntityId {
+        self.header().id
+    }
+
+    pub fn root(&self) -> &Pubkey {
+        &self.header().root
+    }
+
+    pub fn parent_id(&self) -> EntityId {
+        self.header().parent_id
+    }
+
+    pub fn is_parent<U: AccountType>(&self, other: &Entity<B, U>) -> bool {
+        self.root() == other.root() && self.id() == other.parent_id()
+    }
+
+    pub fn is_child<U: AccountType>(&self, other: &Entity<B, U>) -> bool {
+        self.root() == other.root() && self.parent_id() == other.id()
+    }
+
+    #[inline(never)]
+    pub fn is_rent_exempt(&self, rent: &Rent) -> bool {
+        is_rent_exempt_fixed_arithmetic(
+            rent,
+            self.account().lamports(),
+            self.account().data().len() as u64,
+        )
     }
 }
 
@@ -142,74 +231,9 @@ impl EntityAllocator {
     }
 }
 
-#[repr(C)]
-pub struct FarmState {
-    pub administrator_authority: Pubkey,
-    pub program_authority: Pubkey,
-    pub active_stake_vault: Pubkey,
-    pub inactive_stake_vault: Pubkey,
-    pub reward_vault: Pubkey,
-
-    pub allocator: EntityAllocator,
-    pub active_stake: u64,
-    pub inactive_stake: u64,
-    pub program_authority_salt: u64,
-    pub program_authority_nonce: u8,
-}
-
-const_assert!(size_of::<FarmState>() <= FARM_ROOT_RESERVED);
-
-#[repr(C)]
-pub struct Request {
-    pub slot: u64,
-    pub kind: RequestKind,
-}
-
-#[repr(C)]
-pub enum RequestKind {
-    AddStake { staker: Pubkey, amount: u64 },
-    RemoveStake { staker: Pubkey, amount: u64 },
-}
-
-#[repr(C)]
-pub struct Staker {
-    pub authority: Pubkey,
-    pub active_stake: u64,
-    pub inactive_stake: u64,
-    pub unclaimed_reward: u64,
-}
-
-pub struct Farm;
-pub struct RequestQueue;
-pub struct StakerRegistry;
-
-impl AccountType for Farm {
-    fn is_valid_size(size: usize) -> bool {
-        size >= FARM_ROOT_RESERVED
-    }
-}
-
-impl<B: AccountBackend> Deref for Entity<B, Farm> {
-    type Target = FarmState;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { reinterpret_unchecked(self.body()) }
-    }
-}
-
-impl<B: AccountBackendMut> DerefMut for Entity<B, Farm> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { reinterpret_mut_unchecked(self.body_mut()) }
-    }
-}
-
-impl<B: AccountBackendMut> Entity<B, Farm> {
-    pub fn initialize(destination: B) -> Result<Self, Error> {
-        let mut farm = unsafe { Entity::<_, Farm>::raw(destination)? };
-
-        farm.header_mut().kind = EntityKind::Root;
-        farm.header_mut().root = *farm.account().key();
-
-        Ok(farm)
-    }
+pub enum RelationshipKind {
+    None,
+    Parent,
+    Child,
+    Sibling,
 }
