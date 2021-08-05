@@ -45,7 +45,7 @@ macro_rules! entrypoint {
         #[no_mangle]
         pub unsafe extern "C" fn entrypoint(input: *mut u8) -> u64 {
             let input =
-                unsafe { $crate::input::ProgramInput::deserialize_from_bpf_entrypoint(input) };
+                unsafe { $crate::input::BpfProgramInput::deserialize_from_bpf_entrypoint(input) };
             match $process_instruction(input) {
                 Ok(()) => solana_program::entrypoint::SUCCESS,
                 Err(error) => error.into(),
