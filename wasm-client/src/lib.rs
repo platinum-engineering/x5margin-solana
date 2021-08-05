@@ -5,31 +5,45 @@ use std::{
 };
 
 use async_trait::async_trait;
-use serde::{de::DeserializeOwned, Deserialize};
-use wasm_bindgen::prelude::*;
+use futures::{Future, TryFutureExt};
+use js_sys::Promise;
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use wasm_bindgen::{convert::FromWasmAbi, prelude::*};
+use wasm_bindgen_futures::{future_to_promise, JsFuture};
 
 use solana_api_types::{
     Client, ClientError, CommitmentConfig, EncodedConfirmedTransaction, Message, Pubkey,
     RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse, RpcSendTransactionConfig,
     RpcSignatureStatusConfig, RpcSignaturesForAddressConfig, RpcSimulateTransactionConfig,
-    RpcSimulateTransactionResult, RpcTransactionConfig, Signature, SignatureInfo, Slot,
-    Transaction, TransactionStatus, UiAccount, UiAccountEncoding, UiTransactionEncoding,
+    RpcSimulateTransactionResult, RpcSlotConfig, RpcTransactionConfig, Signature, SignatureInfo,
+    Slot, Transaction, TransactionStatus, UiAccount, UiAccountEncoding, UiTransactionEncoding,
 };
 
-#[wasm_bindgen]
-pub struct SolanaApiClient {
+struct SolanaApiClient {
     client: reqwest::Client,
     current_id: AtomicUsize,
-    solana_api_url: String,
+    solana_api_url: &'static str,
 }
 
-#[wasm_bindgen]
 impl SolanaApiClient {
-    pub fn new(solana_api_url: &str) -> Self {
+    fn new(solana_api_url: &'static str) -> Self {
         Self {
             client: reqwest::Client::new(),
             current_id: AtomicUsize::new(0),
-            solana_api_url: solana_api_url.to_string(),
+            solana_api_url,
+        }
+    }
+
+    fn devnet() -> Self {
+        Self::new("https://api.devnet.solana.com")
+    }
+
+    fn dupe(&self) -> Self {
+        let id = self.current_id.fetch_add(1, Ordering::SeqCst);
+        Self {
+            client: self.client.clone(),
+            current_id: AtomicUsize::new(id),
+            solana_api_url: self.solana_api_url,
         }
     }
 }
@@ -50,6 +64,8 @@ impl SolanaApiClient {
     async fn mk_request<T: DeserializeOwned>(&self, r: Request) -> Result<T, ClientError> {
         let id = self.current_id.fetch_add(1, Ordering::SeqCst);
 
+        log::info!("{}", id);
+
         let request = serde_json::json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -60,7 +76,7 @@ impl SolanaApiClient {
 
         let r = self
             .client
-            .post(&self.solana_api_url)
+            .post(self.solana_api_url)
             .header("Accept", "application/json")
             .header("Content-Type", "application/json")
             .body(request)
@@ -282,11 +298,195 @@ impl Client for SolanaApiClient {
 }
 
 #[wasm_bindgen]
-pub async fn run() -> Result<JsValue, JsValue> {
-    console_log::init().unwrap();
+pub struct ApiClient {
+    inner: SolanaApiClient,
+}
 
-    let api = "https://api.devnet.solana.com".to_string();
-    let client = SolanaApiClient::new(&api);
+fn return_promise(fut: impl Future<Output = Result<JsValue, ClientError>> + 'static) -> Promise {
+    future_to_promise(fut.map_err(|err| err.to_string().into()))
+}
+
+#[wasm_bindgen]
+impl ApiClient {
+    pub fn devnet() -> Self {
+        Self {
+            inner: SolanaApiClient::devnet(),
+        }
+    }
+
+    pub fn get_account_info(&self, account: String, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let account = Pubkey::from_str(&account)?;
+            let cfg = cfg.into_serde()?;
+            let r = client.get_account_info(account, cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn get_program_accounts(&self, program: String, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let program = Pubkey::from_str(&program)?;
+            let cfg = cfg.into_serde()?;
+            let r = client.get_program_accounts(program, cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn get_multiple_accounts(&self, accounts: Box<[JsValue]>, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let accounts: Vec<Pubkey> = accounts
+                .into_iter()
+                .filter_map(|a| {
+                    let s = a.as_string()?;
+                    Pubkey::from_str(&s).ok()
+                })
+                .collect();
+            let cfg = cfg.into_serde()?;
+            let r = client.get_multiple_accounts(&accounts, cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn get_signature_statuses(&self, signatures: Box<[JsValue]>, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let signatures: Vec<Signature> = signatures
+                .into_iter()
+                .filter_map(|s| {
+                    let s = s.as_string()?;
+                    Signature::from_str(&s).ok()
+                })
+                .collect();
+            let cfg = cfg.into_serde()?;
+            let r = client.get_signature_statuses(&signatures, cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn get_signatures_for_address(&self, address: String, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let address = Pubkey::from_str(&address)?;
+            let cfg = cfg.into_serde()?;
+            let r = client.get_signatures_for_address(&address, cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn get_slot(&self, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let cfg = cfg.into_serde()?;
+            let r = client.get_slot(cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn get_transaction(&self, signature: String, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let signature = Signature::from_str(&signature)?;
+            let cfg = cfg.into_serde()?;
+            let r = client.get_transaction(signature, cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn request_airdrop(&self, pubkey: String, lamports: u64, commitment: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let pubkey = Pubkey::from_str(&pubkey)?;
+            let commitment = commitment.into_serde()?;
+            let r = client
+                .request_airdrop(&pubkey, lamports, commitment)
+                .await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn send_transaction(&self, transaction: JsValue, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let transaction = transaction.into_serde()?;
+            let cfg = cfg.into_serde()?;
+            let r = client.send_transaction(&transaction, cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn simulate_transaction(&self, transaction: JsValue, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let transaction = transaction.into_serde()?;
+            let cfg = cfg.into_serde()?;
+            let r = client.simulate_transaction(&transaction, cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+}
+
+#[wasm_bindgen]
+pub fn init_rust_logs() {
+    console_log::init().unwrap();
+}
+
+#[wasm_bindgen]
+pub async fn run() -> Result<JsValue, JsValue> {
+    let api = "https://api.devnet.solana.com";
+    let client = SolanaApiClient::new(api);
 
     let pubkey = Pubkey::try_from("4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA").unwrap();
     let r = client
