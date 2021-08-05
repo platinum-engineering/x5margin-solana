@@ -3598,6 +3598,7 @@ dependencies = [
  "serde_json",
  "solana-api-types",
  "thiserror",
+ "tokio 1.8.1",
  "wasm-bindgen",
  "wasm-bindgen-futures",
 ]

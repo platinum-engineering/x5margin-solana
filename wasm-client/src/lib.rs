@@ -1,5 +1,4 @@
 use std::{
-    convert::TryFrom,
     str::FromStr,
     sync::atomic::{AtomicUsize, Ordering},
 };
@@ -7,16 +6,15 @@ use std::{
 use async_trait::async_trait;
 use futures::{Future, TryFutureExt};
 use js_sys::Promise;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use wasm_bindgen::{convert::FromWasmAbi, prelude::*};
-use wasm_bindgen_futures::{future_to_promise, JsFuture};
+use serde::{de::DeserializeOwned, Deserialize};
+use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::future_to_promise;
 
 use solana_api_types::{
-    Client, ClientError, CommitmentConfig, EncodedConfirmedTransaction, Message, Pubkey,
-    RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse, RpcSendTransactionConfig,
-    RpcSignatureStatusConfig, RpcSignaturesForAddressConfig, RpcSimulateTransactionConfig,
-    RpcSimulateTransactionResult, RpcSlotConfig, RpcTransactionConfig, Signature, SignatureInfo,
-    Slot, Transaction, TransactionStatus, UiAccount, UiAccountEncoding, UiTransactionEncoding,
+    Client, ClientError, EncodedConfirmedTransaction, Pubkey, RpcError, RpcKeyedAccount,
+    RpcResponse, RpcSendTransactionConfig, RpcSignaturesForAddressConfig,
+    RpcSimulateTransactionConfig, RpcSimulateTransactionResult, Signature, SignatureInfo, Slot,
+    TransactionStatus, UiAccount,
 };
 
 struct SolanaApiClient {
@@ -483,104 +481,124 @@ pub fn init_rust_logs() {
     console_log::init().unwrap();
 }
 
-#[wasm_bindgen]
-pub async fn run() -> Result<JsValue, JsValue> {
-    let api = "https://api.devnet.solana.com";
-    let client = SolanaApiClient::new(api);
+#[cfg(test)]
+mod tests {
+    use std::convert::TryFrom;
 
-    let pubkey = Pubkey::try_from("4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA").unwrap();
-    let r = client
-        .get_account_info(pubkey, None)
-        .await
-        .map_err(|err| err.to_string())?;
+    use solana_api_types::{
+        RpcAccountInfoConfig, RpcSignatureStatusConfig, RpcTransactionConfig, UiAccountEncoding,
+        UiTransactionEncoding,
+    };
 
-    let pubkey = Pubkey::try_from("4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T").unwrap();
-    let r = client
-        .get_program_accounts(pubkey, None)
-        .await
-        .map_err(|err| err.to_string())?;
+    use super::*;
 
-    let accounts = &[
-        Pubkey::try_from("vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg").unwrap(),
-        Pubkey::try_from("4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA").unwrap(),
-    ];
-    let r = client
-        .get_multiple_accounts(
-            accounts,
-            Some(RpcAccountInfoConfig {
-                encoding: Some(UiAccountEncoding::Base58),
-                data_slice: None,
-                commitment: None,
-            }),
+    fn init_client() -> SolanaApiClient {
+        SolanaApiClient::devnet()
+    }
+
+    #[tokio::test]
+    async fn test_get_account_info() {
+        let client = init_client();
+        let pubkey = Pubkey::try_from("4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA").unwrap();
+        let _r = client.get_account_info(pubkey, None).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_program_accounts() {
+        let client = init_client();
+        let pubkey = Pubkey::try_from("4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T").unwrap();
+        let _r = client.get_program_accounts(pubkey, None).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_multiple_accounts() {
+        let client = init_client();
+        let accounts = &[
+            Pubkey::try_from("vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg").unwrap(),
+            Pubkey::try_from("4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA").unwrap(),
+        ];
+        let _r = client
+            .get_multiple_accounts(
+                accounts,
+                Some(RpcAccountInfoConfig {
+                    encoding: Some(UiAccountEncoding::Base58),
+                    data_slice: None,
+                    commitment: None,
+                }),
+            )
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_signature_statuses() {
+        let client = init_client();
+        let signatures = &[
+            Signature::try_from("5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW").unwrap(),
+            Signature::try_from("5j7s6NiJS3JAkvgkoc18WVAsiSaci2pxB2A6ueCJP4tprA2TFg9wSyTLeYouxPBJEMzJinENTkpA52YStRW5Dia7").unwrap(),
+        ];
+        let _r = client
+            .get_signature_statuses(
+                signatures,
+                Some(RpcSignatureStatusConfig {
+                    search_transaction_history: true,
+                }),
+            )
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_signatures_for_address() {
+        let client = init_client();
+        let address = Pubkey::try_from("Vote111111111111111111111111111111111111111").unwrap();
+        let _r = client
+            .get_signatures_for_address(
+                &address,
+                Some(RpcSignaturesForAddressConfig {
+                    limit: Some(1),
+                    ..Default::default()
+                }),
+            )
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_slot() {
+        let client = init_client();
+        let _r = client.get_slot(None).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_transaction() {
+        let client = init_client();
+        let signature = Signature::from_str(
+            "2nBhEBYYvfaAe16UMNqRHre4YNSskvuYgx3M6E4JP1oDYvZEJHvoPzyUidNgNX5r9sTyN1J9UxtbCXy2rqYcuyuv",
         )
-        .await
-        .map_err(|err| err.to_string())?;
+        .unwrap();
+        let _r = client
+            .get_transaction(
+                signature,
+                Some(RpcTransactionConfig {
+                    encoding: Some(UiTransactionEncoding::Json),
+                    ..Default::default()
+                }),
+            )
+            .await
+            .unwrap();
+    }
 
-    let signatures = &[
-        Signature::try_from("5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW").unwrap(),
-        Signature::try_from("5j7s6NiJS3JAkvgkoc18WVAsiSaci2pxB2A6ueCJP4tprA2TFg9wSyTLeYouxPBJEMzJinENTkpA52YStRW5Dia7").unwrap(),
-    ];
-    let r = client
-        .get_signature_statuses(
-            signatures,
-            Some(RpcSignatureStatusConfig {
-                search_transaction_history: true,
-            }),
-        )
-        .await
-        .map_err(|err| err.to_string())?;
-
-    let address = Pubkey::try_from("Vote111111111111111111111111111111111111111").unwrap();
-    let r = client
-        .get_signatures_for_address(
-            &address,
-            Some(RpcSignaturesForAddressConfig {
-                limit: Some(1),
-                ..Default::default()
-            }),
-        )
-        .await
-        .map_err(|err| err.to_string())?;
-
-    let r = client.get_slot(None).await.map_err(|err| err.to_string())?;
-
-    let signature = Signature::from_str(
-        "2nBhEBYYvfaAe16UMNqRHre4YNSskvuYgx3M6E4JP1oDYvZEJHvoPzyUidNgNX5r9sTyN1J9UxtbCXy2rqYcuyuv",
-    )
-    .unwrap();
-    let r = client
-        .get_transaction(
-            signature,
-            Some(RpcTransactionConfig {
-                encoding: Some(UiTransactionEncoding::Json),
-                ..Default::default()
-            }),
-        )
-        .await
-        .map_err(|err| err.to_string())?;
-
-    let pubkey = Pubkey::from_str("83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri").unwrap();
-    let r = client
-        .request_airdrop(&pubkey, 1000000000, None)
-        .await
-        .map_err(|err| err.to_string())?;
+    #[tokio::test]
+    async fn test_request_airdrop() {
+        let client = init_client();
+        let pubkey = Pubkey::from_str("83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri").unwrap();
+        let _r = client
+            .request_airdrop(&pubkey, 1000000000, None)
+            .await
+            .unwrap();
+    }
 
     // TODO: send_transaction
-    let transaction = Transaction {
-        signatures: vec![],
-        message: Message::default(),
-    };
-    let r = client
-        .simulate_transaction(
-            &transaction,
-            RpcSimulateTransactionConfig {
-                encoding: Some(UiTransactionEncoding::Base58),
-                ..Default::default()
-            },
-        )
-        .await
-        .map_err(|err| err.to_string())?;
-
-    let r = JsValue::from_serde(&r).unwrap();
-    Ok(r)
+    // TODO: simulate_transaction
 }
