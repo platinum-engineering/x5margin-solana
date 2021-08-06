@@ -5,12 +5,18 @@ use serde_json::Value;
 
 use serde::{Deserialize, Serialize};
 
+pub mod account_info;
+pub mod clock;
+pub mod entrypoint;
 mod error;
 mod faucet;
 mod instruction;
+pub mod program;
 mod pubkey;
 mod short_vec;
 mod signature;
+pub mod syscalls;
+pub mod sysvar;
 mod transaction;
 
 pub use error::{ClientError, RpcError};

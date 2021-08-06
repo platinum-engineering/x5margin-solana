@@ -2,7 +2,8 @@ use std::{borrow::Borrow, mem::size_of};
 
 use chrono::{DateTime, TimeZone, Utc};
 use fixed::{traits::ToFixed, types::U64F64};
-use solana_program::{clock::Clock, pubkey::Pubkey, rent::Rent, sysvar::Sysvar};
+
+use solana_api_types::{clock::Clock, program::Rent, sysvar::Sysvar, Pubkey};
 
 use crate::{log::Loggable, math::Checked, mem::memcmp, qlog};
 

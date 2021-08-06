@@ -1,4 +1,4 @@
-use solana_program::pubkey::Pubkey;
+use solana_api_types::Pubkey;
 
 pub mod offchain;
 pub mod onchain;

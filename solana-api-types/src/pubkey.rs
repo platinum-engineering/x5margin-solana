@@ -28,6 +28,15 @@ impl fmt::Display for Pubkey {
     }
 }
 
+#[macro_export]
+macro_rules! declare_id {
+    ($name:expr) => {
+        lazy_static::lazy_static! {
+            static ref ID: $crate::Pubkey = std::str::FromStr::from_str($name).unwrap();
+        }
+    };
+}
+
 #[derive(Error, Debug, Serialize, Clone, PartialEq)]
 pub enum ParsePubkeyError {
     #[error("String is the wrong size")]

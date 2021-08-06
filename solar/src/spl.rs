@@ -1,6 +1,6 @@
 use std::{io::Write, mem::size_of, ops::Deref};
 
-use solana_program::{program_error::ProgramError, pubkey::Pubkey};
+use solana_api_types::{program::ProgramError, Pubkey};
 
 use crate::{
     account::{onchain::Account, AccountBackend, AccountFields},
@@ -13,7 +13,7 @@ use crate::{
     util::pubkey_eq,
 };
 
-solana_program::declare_id!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+solana_api_types::declare_id!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
 #[repr(packed)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
