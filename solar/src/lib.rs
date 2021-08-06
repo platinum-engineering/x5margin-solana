@@ -11,8 +11,11 @@ extern crate strum;
 
 pub mod account;
 pub mod collections;
+#[cfg(feature = "onchain")]
 pub mod entrypoint;
+#[cfg(feature = "onchain")]
 pub mod input;
+#[cfg(feature = "onchain")]
 pub mod invoke;
 pub mod log;
 pub mod math;

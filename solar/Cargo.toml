@@ -6,6 +6,7 @@ version = "0.1.0"
 [features]
 sol-mem-intrinsics = []
 test = ["solana-sdk"]
+onchain = []
 
 [dependencies]
 az = "1.1.1"

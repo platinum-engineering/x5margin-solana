@@ -135,16 +135,3 @@ impl From<u64> for ProgramError {
         }
     }
 }
-
-#[repr(C)]
-#[derive(Serialize, Deserialize, PartialEq, Clone, Copy, Debug)]
-pub struct Rent {
-    /// Rental rate
-    pub lamports_per_byte_year: u64,
-
-    /// exemption threshold, in years
-    pub exemption_threshold: f64,
-
-    // What portion of collected rent are to be destroyed, percentage-wise
-    pub burn_percent: u8,
-}

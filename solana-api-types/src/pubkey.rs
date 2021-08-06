@@ -28,6 +28,12 @@ impl fmt::Display for Pubkey {
     }
 }
 
+impl AsRef<[u8]> for Pubkey {
+    fn as_ref(&self) -> &[u8] {
+        &self.0[..]
+    }
+}
+
 #[macro_export]
 macro_rules! declare_id {
     ($name:expr) => {

@@ -13,6 +13,7 @@ mod faucet;
 mod instruction;
 pub mod program;
 mod pubkey;
+pub mod rent;
 mod short_vec;
 mod signature;
 pub mod syscalls;
