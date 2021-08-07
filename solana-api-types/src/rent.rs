@@ -35,3 +35,11 @@ impl Default for Rent {
         }
     }
 }
+
+use crate::{impl_sysvar_get, program::ProgramError, sysvar::Sysvar};
+
+crate::declare_sysvar_id!("SysvarRent111111111111111111111111111111111", Rent);
+
+impl Sysvar for Rent {
+    impl_sysvar_get!(sol_get_rent_sysvar);
+}

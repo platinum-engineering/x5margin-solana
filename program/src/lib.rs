@@ -2,13 +2,15 @@
 #![feature(min_const_generics)]
 
 use fixed::types::U64F64;
+#[cfg(feature = "onchain")]
 use simple_stake::StakePoolEntity;
-use solana_program::entrypoint::ProgramResult;
-use solar::{
-    input::{BpfProgramInput, Entrypoint, ProgramInput},
-    math::Checked,
-    util::ResultExt,
-};
+#[cfg(feature = "onchain")]
+use solana_api_types::program::ProgramResult;
+#[cfg(feature = "onchain")]
+use solar::input::{BpfProgramInput, Entrypoint, ProgramInput};
+use solar::math::Checked;
+#[cfg(feature = "onchain")]
+use solar::util::ResultExt;
 
 #[macro_use]
 extern crate static_assertions;
@@ -26,6 +28,7 @@ pub enum Method {
     Simple(simple_stake::Method),
 }
 
+#[cfg(feature = "onchain")]
 #[allow(unused)]
 pub fn main(mut input: BpfProgramInput) -> ProgramResult {
     let mut data = input.data();
@@ -58,12 +61,14 @@ pub fn main(mut input: BpfProgramInput) -> ProgramResult {
 
 pub struct Program;
 
+#[cfg(feature = "onchain")]
 impl Entrypoint for Program {
     fn call(input: BpfProgramInput) -> ProgramResult {
         main(input)
     }
 }
 
+#[cfg(feature = "onchain")]
 #[cfg(test)]
 mod test {
     use std::mem::size_of;
@@ -71,7 +76,6 @@ mod test {
     use parity_scale_codec::Encode;
     use solana_program::{
         instruction::{AccountMeta, Instruction},
-        pubkey::Pubkey,
         system_instruction::create_account,
     };
     use solana_program_test::{builtin_process_instruction, ProgramTest};
@@ -81,6 +85,8 @@ mod test {
         spl::{Mint, Wallet},
         util::minimum_balance,
     };
+
+    use solana_api_types::Pubkey;
 
     use crate::{
         data::AccountType,

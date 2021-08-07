@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use solana_program::{pubkey::Pubkey, rent::Rent, sysvar::Sysvar};
+use solana_api_types::{rent::Rent, sysvar::Sysvar, Pubkey};
 use solar::{
     account::{AccountBackend, AccountFields, AccountFieldsMut},
     reinterpret::{reinterpret_mut_unchecked, reinterpret_unchecked},

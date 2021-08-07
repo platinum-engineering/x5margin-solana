@@ -1,21 +1,31 @@
 use std::mem::size_of;
 
+#[cfg(feature = "onchain")]
 use az::CheckedAs;
-use solana_program::pubkey::Pubkey;
+use solana_api_types::Pubkey;
+#[cfg(feature = "onchain")]
 use solar::{
-    account::{onchain::Account, AccountFields, AccountFieldsMut},
+    account::onchain::Account,
     input::AccountSource,
-    math::{Checked, ToF64},
-    prelude::AccountBackend,
+    math::ToF64,
     qlog,
+    util::{is_zeroed, timestamp_now, ResultExt},
+};
+use solar::{
+    account::{AccountFields, AccountFieldsMut},
+    math::Checked,
+    prelude::AccountBackend,
     reinterpret::as_bytes,
     spl::{MintAccount, TokenProgram, WalletAccount},
-    util::{is_zeroed, pubkey_eq, timestamp_now, ResultExt},
+    util::pubkey_eq,
 };
+#[cfg(feature = "onchain")]
 use solar_macros::parse_accounts;
 
+#[cfg(feature = "onchain")]
+use crate::data::EntityHeader;
 use crate::{
-    data::{AccountType, Entity, EntityAllocator, EntityHeader, EntityKind, HEADER_RESERVED},
+    data::{AccountType, Entity, EntityAllocator, EntityKind, HEADER_RESERVED},
     error::Error,
     impl_entity_simple_deref, TokenAmount,
 };
@@ -99,6 +109,7 @@ pub struct InitializeArgsAccounts<B: AccountBackend> {
     pub stake_vault: WalletAccount<B>,
 }
 
+#[cfg(feature = "onchain")]
 impl<B: AccountBackend> InitializeArgsAccounts<B> {
     #[inline]
     pub fn from_program_input<T: AccountSource<B>>(input: &mut T) -> Result<Self, Error> {
@@ -163,6 +174,7 @@ pub struct AddRewardArgsAccounts<B: AccountBackend> {
 }
 
 impl<B: AccountBackend> StakeArgsAccounts<B> {
+    #[cfg(feature = "onchain")]
     #[inline]
     pub fn from_program_input<T: AccountSource<B>>(input: &mut T) -> Result<Self, Error>
     where
@@ -194,6 +206,7 @@ impl<B: AccountBackend> StakeArgsAccounts<B> {
 }
 
 impl<B: AccountBackend> UnStakeArgsAccounts<B> {
+    #[cfg(feature = "onchain")]
     #[inline(always)]
     pub fn from_program_input<T: AccountSource<B>>(input: &mut T) -> Result<Self, Error> {
         let program_id = *input.program_id();
@@ -221,6 +234,7 @@ impl<B: AccountBackend> UnStakeArgsAccounts<B> {
 }
 
 impl<B: AccountBackend> AddRewardArgsAccounts<B> {
+    #[cfg(feature = "onchain")]
     #[inline]
     pub fn from_program_input<T: AccountSource<B>>(input: &mut T) -> Result<Self, Error> {
         let program_id = *input.program_id();
@@ -252,6 +266,7 @@ impl<B> Entity<B, StakePool>
 where
     B: AccountBackend,
 {
+    #[cfg(feature = "onchain")]
     #[inline(never)]
     pub fn initialize<T>(input: &mut T, args: InitializeArgs) -> Result<(), Error>
     where
@@ -397,6 +412,7 @@ where
         Ok(wallet)
     }
 
+    #[cfg(feature = "onchain")]
     #[inline]
     fn load_ticket(&self, ticket: B) -> Result<Entity<B, StakerTicket>, Error> {
         let ticket = Entity::<B, StakerTicket>::raw_any(self.account().owner(), ticket)?;
@@ -411,6 +427,7 @@ where
         }
     }
 
+    #[cfg(feature = "onchain")]
     #[inline]
     fn load_or_init_ticket(
         &mut self,
@@ -447,6 +464,7 @@ where
         }
     }
 
+    #[cfg(feature = "onchain")]
     #[inline(never)]
     pub fn add_stake<T>(input: &mut T, amount: TokenAmount) -> Result<(), Error>
     where
@@ -503,6 +521,7 @@ where
         Ok(())
     }
 
+    #[cfg(feature = "onchain")]
     #[inline(never)]
     pub fn remove_stake<T>(input: &mut T, amount: TokenAmount) -> Result<(), Error>
     where
@@ -561,6 +580,7 @@ where
         Ok(())
     }
 
+    #[cfg(feature = "onchain")]
     #[inline(never)]
     pub fn claim_reward<T>(input: &mut T) -> Result<(), Error>
     where
@@ -627,6 +647,7 @@ where
         Ok(())
     }
 
+    #[cfg(feature = "onchain")]
     #[inline(never)]
     pub fn add_reward<T>(input: &mut T, amount: TokenAmount) -> Result<(), Error>
     where
