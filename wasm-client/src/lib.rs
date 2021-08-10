@@ -11,7 +11,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
 use solana_api_types::{
-    Client, ClientError, EncodedConfirmedTransaction, Pubkey, RpcError, RpcKeyedAccount,
+    Account, Client, ClientError, EncodedConfirmedTransaction, Pubkey, RpcError, RpcKeyedAccount,
     RpcResponse, RpcSendTransactionConfig, RpcSignaturesForAddressConfig,
     RpcSimulateTransactionConfig, RpcSimulateTransactionResult, Signature, SignatureInfo, Slot,
     TransactionStatus, UiAccount,
@@ -474,6 +474,16 @@ impl ApiClient {
 
         return_promise(fut)
     }
+}
+
+#[wasm_bindgen]
+pub struct MintAccount {
+    account: solar::spl::MintAccount<Box<Account>>,
+}
+
+#[wasm_bindgen]
+pub struct WalletAccount {
+    account: solar::spl::WalletAccount<Box<Account>>,
 }
 
 #[wasm_bindgen]
