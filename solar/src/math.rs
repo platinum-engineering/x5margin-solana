@@ -123,7 +123,7 @@ fn handle_overflow<T>(v: Option<T>, location: &Location) -> T {
 
 macro_rules! overflow_guard {
     ($e:expr) => {
-        handle_overflow($e, std::panic::Location::caller());
+        handle_overflow($e, std::panic::Location::caller())
     };
 }
 

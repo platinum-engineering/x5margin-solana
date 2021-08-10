@@ -4,8 +4,9 @@ use std::{
     slice::{from_raw_parts, from_raw_parts_mut},
 };
 
-use solana_program::pubkey::Pubkey;
 use static_assertions::const_assert_eq;
+
+use solana_api_types::Pubkey;
 
 use crate::{log::Loggable, util::AsPubkey};
 

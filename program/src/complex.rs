@@ -3,7 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use solana_program::pubkey::Pubkey;
+use solana_api_types::Pubkey;
 use solar::{
     account::{AccountFields, AccountFieldsMut},
     prelude::AccountBackend,

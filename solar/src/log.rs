@@ -10,7 +10,8 @@
 use std::{mem::MaybeUninit, slice::from_raw_parts};
 
 use itoap::write_to_ptr;
-use solana_program::{log::sol_log, program_error::ProgramError};
+
+use solana_api_types::{program::ProgramError, syscalls::sol_log};
 
 use crate::mem::memcpy;
 

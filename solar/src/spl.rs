@@ -1,19 +1,20 @@
 use std::{io::Write, mem::size_of, ops::Deref};
 
-use solana_program::{program_error::ProgramError, pubkey::Pubkey};
+#[cfg(feature = "onchain")]
+use solana_api_types::program::ProgramError;
+use solana_api_types::Pubkey;
 
 use crate::{
-    account::{onchain::Account, AccountBackend, AccountFields},
+    account::{AccountBackend, AccountFields},
     collections::StaticVec,
     forward_account_backend,
-    invoke::Invoker,
     log::Loggable,
     math::Checked,
     reinterpret::{is_valid_for_type, reinterpret_unchecked},
     util::pubkey_eq,
 };
 
-solana_program::declare_id!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+solana_api_types::declare_id!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
 #[repr(packed)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,7 +163,7 @@ impl<'a, 'b: 'a, B: AccountBackend> MintAccount<B> {
     pub fn any(account: B) -> Result<Self, SplReadError> {
         let data = account.data();
 
-        if !pubkey_eq(account.owner(), &ID) {
+        if !pubkey_eq(account.owner(), &*ID) {
             Err(SplReadError::InvalidOwner)
         } else if data.len() != size_of::<Mint>() || !is_valid_for_type::<Mint>(data) {
             Err(SplReadError::InvalidData)
@@ -194,7 +195,7 @@ impl<B: AccountBackend> WalletAccount<B> {
     pub fn any(account: B) -> Result<Self, SplReadError> {
         let data = account.data();
 
-        if !pubkey_eq(account.owner(), &ID) {
+        if !pubkey_eq(account.owner(), &*ID) {
             Err(SplReadError::InvalidOwner)
         } else if data.len() != size_of::<Wallet>() || !is_valid_for_type::<Wallet>(data) {
             Err(SplReadError::InvalidData)
@@ -214,7 +215,7 @@ impl<B: AccountBackend> Deref for WalletAccount<B> {
 
 impl<B: AccountBackend> TokenProgram<B> {
     pub fn load(account: B) -> Result<Self, SplReadError> {
-        if !pubkey_eq(account.key(), &ID) {
+        if !pubkey_eq(account.key(), &*ID) {
             Err(SplReadError::InvalidOwner)
         } else {
             Ok(Self { account })
@@ -226,6 +227,7 @@ impl<B: AccountBackend> TokenProgram<B> {
     }
 }
 
+#[cfg(feature = "onchain")]
 impl<T: AccountBackend> TokenProgram<T> {
     fn handle_result(
         error: Result<(), ProgramError>,
@@ -247,9 +249,9 @@ impl<T: AccountBackend> TokenProgram<T> {
         seeds: &[&[&[u8]]],
     ) -> Result<Result<(), TokenError>, ProgramError>
     where
-        T: AccountBackend<Impl = Account>,
+        T: AccountBackend<Impl = crate::account::onchain::Account>,
     {
-        let mut invoker = Invoker::<4>::new();
+        let mut invoker = crate::invoke::Invoker::<4>::new();
         invoker.push(from);
         invoker.push(to);
         invoker.push_signed(authority);

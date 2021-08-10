@@ -2,8 +2,9 @@
 
 use std::{marker::PhantomData, mem::MaybeUninit, ptr::null};
 
-use solana_program::{
-    entrypoint::ProgramResult, log::sol_log, program_error::ProgramError, pubkey::Pubkey,
+use solana_api_types::{
+    program::{ProgramError, ProgramResult},
+    Pubkey,
 };
 
 use crate::{

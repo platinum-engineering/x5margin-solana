@@ -1,35 +1,47 @@
 use std::{
-    convert::TryFrom,
     str::FromStr,
     sync::atomic::{AtomicUsize, Ordering},
 };
 
 use async_trait::async_trait;
+use futures::{Future, TryFutureExt};
+use js_sys::Promise;
 use serde::{de::DeserializeOwned, Deserialize};
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::future_to_promise;
 
 use solana_api_types::{
-    Client, ClientError, CommitmentConfig, EncodedConfirmedTransaction, Message, Pubkey,
-    RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse, RpcSendTransactionConfig,
-    RpcSignatureStatusConfig, RpcSignaturesForAddressConfig, RpcSimulateTransactionConfig,
-    RpcSimulateTransactionResult, RpcTransactionConfig, Signature, SignatureInfo, Slot,
-    Transaction, TransactionStatus, UiAccount, UiAccountEncoding, UiTransactionEncoding,
+    Client, ClientError, EncodedConfirmedTransaction, Pubkey, RpcError, RpcKeyedAccount,
+    RpcResponse, RpcSendTransactionConfig, RpcSignaturesForAddressConfig,
+    RpcSimulateTransactionConfig, RpcSimulateTransactionResult, Signature, SignatureInfo, Slot,
+    TransactionStatus, UiAccount,
 };
 
-#[wasm_bindgen]
-pub struct SolanaApiClient {
+struct SolanaApiClient {
     client: reqwest::Client,
     current_id: AtomicUsize,
-    solana_api_url: String,
+    solana_api_url: &'static str,
 }
 
-#[wasm_bindgen]
 impl SolanaApiClient {
-    pub fn new(solana_api_url: &str) -> Self {
+    fn new(solana_api_url: &'static str) -> Self {
         Self {
             client: reqwest::Client::new(),
             current_id: AtomicUsize::new(0),
-            solana_api_url: solana_api_url.to_string(),
+            solana_api_url,
+        }
+    }
+
+    fn devnet() -> Self {
+        Self::new("https://api.devnet.solana.com")
+    }
+
+    fn dupe(&self) -> Self {
+        let id = self.current_id.fetch_add(1, Ordering::SeqCst);
+        Self {
+            client: self.client.clone(),
+            current_id: AtomicUsize::new(id),
+            solana_api_url: self.solana_api_url,
         }
     }
 }
@@ -50,6 +62,8 @@ impl SolanaApiClient {
     async fn mk_request<T: DeserializeOwned>(&self, r: Request) -> Result<T, ClientError> {
         let id = self.current_id.fetch_add(1, Ordering::SeqCst);
 
+        log::info!("{}", id);
+
         let request = serde_json::json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -60,7 +74,7 @@ impl SolanaApiClient {
 
         let r = self
             .client
-            .post(&self.solana_api_url)
+            .post(self.solana_api_url)
             .header("Accept", "application/json")
             .header("Content-Type", "application/json")
             .body(request)
@@ -282,105 +296,309 @@ impl Client for SolanaApiClient {
 }
 
 #[wasm_bindgen]
-pub async fn run() -> Result<JsValue, JsValue> {
+pub struct ApiClient {
+    inner: SolanaApiClient,
+}
+
+fn return_promise(fut: impl Future<Output = Result<JsValue, ClientError>> + 'static) -> Promise {
+    future_to_promise(fut.map_err(|err| err.to_string().into()))
+}
+
+#[wasm_bindgen]
+impl ApiClient {
+    pub fn devnet() -> Self {
+        Self {
+            inner: SolanaApiClient::devnet(),
+        }
+    }
+
+    pub fn get_account_info(&self, account: String, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let account = Pubkey::from_str(&account)?;
+            let cfg = cfg.into_serde()?;
+            let r = client.get_account_info(account, cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn get_program_accounts(&self, program: String, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let program = Pubkey::from_str(&program)?;
+            let cfg = cfg.into_serde()?;
+            let r = client.get_program_accounts(program, cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn get_multiple_accounts(&self, accounts: Box<[JsValue]>, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let accounts: Vec<Pubkey> = accounts
+                .into_iter()
+                .filter_map(|a| {
+                    let s = a.as_string()?;
+                    Pubkey::from_str(&s).ok()
+                })
+                .collect();
+            let cfg = cfg.into_serde()?;
+            let r = client.get_multiple_accounts(&accounts, cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn get_signature_statuses(&self, signatures: Box<[JsValue]>, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let signatures: Vec<Signature> = signatures
+                .into_iter()
+                .filter_map(|s| {
+                    let s = s.as_string()?;
+                    Signature::from_str(&s).ok()
+                })
+                .collect();
+            let cfg = cfg.into_serde()?;
+            let r = client.get_signature_statuses(&signatures, cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn get_signatures_for_address(&self, address: String, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let address = Pubkey::from_str(&address)?;
+            let cfg = cfg.into_serde()?;
+            let r = client.get_signatures_for_address(&address, cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn get_slot(&self, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let cfg = cfg.into_serde()?;
+            let r = client.get_slot(cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn get_transaction(&self, signature: String, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let signature = Signature::from_str(&signature)?;
+            let cfg = cfg.into_serde()?;
+            let r = client.get_transaction(signature, cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn request_airdrop(&self, pubkey: String, lamports: u64, commitment: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let pubkey = Pubkey::from_str(&pubkey)?;
+            let commitment = commitment.into_serde()?;
+            let r = client
+                .request_airdrop(&pubkey, lamports, commitment)
+                .await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn send_transaction(&self, transaction: JsValue, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let transaction = transaction.into_serde()?;
+            let cfg = cfg.into_serde()?;
+            let r = client.send_transaction(&transaction, cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn simulate_transaction(&self, transaction: JsValue, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let transaction = transaction.into_serde()?;
+            let cfg = cfg.into_serde()?;
+            let r = client.simulate_transaction(&transaction, cfg).await?;
+            let r = JsValue::from_serde(&r)?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+}
+
+#[wasm_bindgen]
+pub fn init_rust_logs() {
     console_log::init().unwrap();
+}
 
-    let api = "https://api.devnet.solana.com".to_string();
-    let client = SolanaApiClient::new(&api);
+#[cfg(test)]
+mod tests {
+    use std::convert::TryFrom;
 
-    let pubkey = Pubkey::try_from("4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA").unwrap();
-    let r = client
-        .get_account_info(pubkey, None)
-        .await
-        .map_err(|err| err.to_string())?;
+    use solana_api_types::{
+        RpcAccountInfoConfig, RpcSignatureStatusConfig, RpcTransactionConfig, UiAccountEncoding,
+        UiTransactionEncoding,
+    };
 
-    let pubkey = Pubkey::try_from("4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T").unwrap();
-    let r = client
-        .get_program_accounts(pubkey, None)
-        .await
-        .map_err(|err| err.to_string())?;
+    use super::*;
 
-    let accounts = &[
-        Pubkey::try_from("vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg").unwrap(),
-        Pubkey::try_from("4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA").unwrap(),
-    ];
-    let r = client
-        .get_multiple_accounts(
-            accounts,
-            Some(RpcAccountInfoConfig {
-                encoding: Some(UiAccountEncoding::Base58),
-                data_slice: None,
-                commitment: None,
-            }),
+    fn init_client() -> SolanaApiClient {
+        SolanaApiClient::devnet()
+    }
+
+    #[tokio::test]
+    async fn test_get_account_info() {
+        let client = init_client();
+        let pubkey = Pubkey::try_from("4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA").unwrap();
+        let _r = client.get_account_info(pubkey, None).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_program_accounts() {
+        let client = init_client();
+        let pubkey = Pubkey::try_from("4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T").unwrap();
+        let _r = client.get_program_accounts(pubkey, None).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_multiple_accounts() {
+        let client = init_client();
+        let accounts = &[
+            Pubkey::try_from("vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg").unwrap(),
+            Pubkey::try_from("4fYNw3dojWmQ4dXtSGE9epjRGy9pFSx62YypT7avPYvA").unwrap(),
+        ];
+        let _r = client
+            .get_multiple_accounts(
+                accounts,
+                Some(RpcAccountInfoConfig {
+                    encoding: Some(UiAccountEncoding::Base58),
+                    data_slice: None,
+                    commitment: None,
+                }),
+            )
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_signature_statuses() {
+        let client = init_client();
+        let signatures = &[
+            Signature::try_from("5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW").unwrap(),
+            Signature::try_from("5j7s6NiJS3JAkvgkoc18WVAsiSaci2pxB2A6ueCJP4tprA2TFg9wSyTLeYouxPBJEMzJinENTkpA52YStRW5Dia7").unwrap(),
+        ];
+        let _r = client
+            .get_signature_statuses(
+                signatures,
+                Some(RpcSignatureStatusConfig {
+                    search_transaction_history: true,
+                }),
+            )
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_signatures_for_address() {
+        let client = init_client();
+        let address = Pubkey::try_from("Vote111111111111111111111111111111111111111").unwrap();
+        let _r = client
+            .get_signatures_for_address(
+                &address,
+                Some(RpcSignaturesForAddressConfig {
+                    limit: Some(1),
+                    ..Default::default()
+                }),
+            )
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_slot() {
+        let client = init_client();
+        let _r = client.get_slot(None).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_transaction() {
+        let client = init_client();
+        let signature = Signature::from_str(
+            "2nBhEBYYvfaAe16UMNqRHre4YNSskvuYgx3M6E4JP1oDYvZEJHvoPzyUidNgNX5r9sTyN1J9UxtbCXy2rqYcuyuv",
         )
-        .await
-        .map_err(|err| err.to_string())?;
+        .unwrap();
+        let _r = client
+            .get_transaction(
+                signature,
+                Some(RpcTransactionConfig {
+                    encoding: Some(UiTransactionEncoding::Json),
+                    ..Default::default()
+                }),
+            )
+            .await
+            .unwrap();
+    }
 
-    let signatures = &[
-        Signature::try_from("5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW").unwrap(),
-        Signature::try_from("5j7s6NiJS3JAkvgkoc18WVAsiSaci2pxB2A6ueCJP4tprA2TFg9wSyTLeYouxPBJEMzJinENTkpA52YStRW5Dia7").unwrap(),
-    ];
-    let r = client
-        .get_signature_statuses(
-            signatures,
-            Some(RpcSignatureStatusConfig {
-                search_transaction_history: true,
-            }),
-        )
-        .await
-        .map_err(|err| err.to_string())?;
-
-    let address = Pubkey::try_from("Vote111111111111111111111111111111111111111").unwrap();
-    let r = client
-        .get_signatures_for_address(
-            &address,
-            Some(RpcSignaturesForAddressConfig {
-                limit: Some(1),
-                ..Default::default()
-            }),
-        )
-        .await
-        .map_err(|err| err.to_string())?;
-
-    let r = client.get_slot(None).await.map_err(|err| err.to_string())?;
-
-    let signature = Signature::from_str(
-        "2nBhEBYYvfaAe16UMNqRHre4YNSskvuYgx3M6E4JP1oDYvZEJHvoPzyUidNgNX5r9sTyN1J9UxtbCXy2rqYcuyuv",
-    )
-    .unwrap();
-    let r = client
-        .get_transaction(
-            signature,
-            Some(RpcTransactionConfig {
-                encoding: Some(UiTransactionEncoding::Json),
-                ..Default::default()
-            }),
-        )
-        .await
-        .map_err(|err| err.to_string())?;
-
-    let pubkey = Pubkey::from_str("83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri").unwrap();
-    let r = client
-        .request_airdrop(&pubkey, 1000000000, None)
-        .await
-        .map_err(|err| err.to_string())?;
+    #[tokio::test]
+    async fn test_request_airdrop() {
+        let client = init_client();
+        let pubkey = Pubkey::from_str("83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri").unwrap();
+        let _r = client
+            .request_airdrop(&pubkey, 1000000000, None)
+            .await
+            .unwrap();
+    }
 
     // TODO: send_transaction
-    let transaction = Transaction {
-        signatures: vec![],
-        message: Message::default(),
-    };
-    let r = client
-        .simulate_transaction(
-            &transaction,
-            RpcSimulateTransactionConfig {
-                encoding: Some(UiTransactionEncoding::Base58),
-                ..Default::default()
-            },
-        )
-        .await
-        .map_err(|err| err.to_string())?;
-
-    let r = JsValue::from_serde(&r).unwrap();
-    Ok(r)
+    // TODO: simulate_transaction
 }
