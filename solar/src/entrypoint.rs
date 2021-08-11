@@ -1,6 +1,6 @@
 use std::{alloc::Layout, mem::size_of, ptr::null_mut};
 
-use solana_program::entrypoint::{HEAP_LENGTH, HEAP_START_ADDRESS};
+use solana_api_types::entrypoint::{HEAP_LENGTH, HEAP_START_ADDRESS};
 
 #[inline(always)]
 pub fn panic_handler(_: &core::panic::PanicInfo) {

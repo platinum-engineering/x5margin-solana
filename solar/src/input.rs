@@ -4,10 +4,9 @@ use std::{
     slice::from_raw_parts,
 };
 
-use solana_program::{
-    account_info::AccountInfo,
-    entrypoint::{ProgramResult, MAX_PERMITTED_DATA_INCREASE},
-    pubkey::Pubkey,
+use solana_api_types::{
+    account_info::AccountInfo, entrypoint::MAX_PERMITTED_DATA_INCREASE, program::ProgramResult,
+    Pubkey,
 };
 
 use crate::{

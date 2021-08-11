@@ -1,8 +1,10 @@
 use thiserror::Error;
 
 use crate::{
-    faucet::FaucetError, signature::SignerError, RpcSimulateTransactionResult, Slot,
-    TransactionError,
+    faucet::FaucetError,
+    pubkey::ParsePubkeyError,
+    signature::{ParseSignatureError, SignerError},
+    RpcSimulateTransactionResult, Slot, TransactionError,
 };
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -148,6 +150,10 @@ pub enum ClientErrorKind {
     TransactionError(#[from] TransactionError),
     #[error(transparent)]
     FaucetError(#[from] FaucetError),
+    #[error(transparent)]
+    PubkeyError(#[from] ParsePubkeyError),
+    #[error(transparent)]
+    SignatureError(#[from] ParseSignatureError),
     #[error("Custom: {0}")]
     Custom(String),
 }
@@ -226,6 +232,24 @@ impl From<TransactionError> for ClientError {
 
 impl From<FaucetError> for ClientError {
     fn from(err: FaucetError) -> Self {
+        Self {
+            request: None,
+            kind: err.into(),
+        }
+    }
+}
+
+impl From<ParsePubkeyError> for ClientError {
+    fn from(err: ParsePubkeyError) -> Self {
+        Self {
+            request: None,
+            kind: err.into(),
+        }
+    }
+}
+
+impl From<ParseSignatureError> for ClientError {
+    fn from(err: ParseSignatureError) -> Self {
         Self {
             request: None,
             kind: err.into(),

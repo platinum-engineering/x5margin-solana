@@ -4,7 +4,7 @@
 //!
 //! Ensure that all invariants of the reinterpreted-as type are upheld *before* a reference
 //! is obtained. Rust's std docs and the Rustonomicon are the best sources on which invariants
-//! need to be upheld, but a short list:  
+//! need to be upheld, but a short list:
 //! * The reinterpreted bytes must be a valid representation of the object. This means it must not contain
 //! invalid values for any of the object's fields, for which there are invalid memory representations, such as
 //! bools, references, etc.
@@ -22,7 +22,7 @@ use std::{
     slice::{from_raw_parts, from_raw_parts_mut},
 };
 
-use solana_program::pubkey::Pubkey;
+use solana_api_types::Pubkey;
 
 /// Checks if the given byte slice satisfies the size and alignment requirements of the target type `T`.
 #[inline(always)]

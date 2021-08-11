@@ -2519,6 +2519,7 @@ dependencies = [
  "bincode",
  "bs58 0.4.0",
  "generic-array 0.14.4",
+ "lazy_static",
  "reqwest",
  "ruzstd",
  "serde",
@@ -2991,10 +2992,11 @@ dependencies = [
  "chrono",
  "fixed",
  "itoap",
+ "lazy_static",
  "minicbor",
  "num-traits",
  "parity-scale-codec",
- "solana-program",
+ "solana-api-types",
  "solana-sdk",
  "static_assertions",
  "strum",
@@ -3014,20 +3016,6 @@ name = "spin"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
-
-[[package]]
-name = "spl-token"
-version = "3.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbfa8fd791aeb4d7ad5fedb7872478de9f4e8b4fcb02dfd9e7f2f9ae3f3ddd73"
-dependencies = [
- "arrayref",
- "num-derive",
- "num-traits",
- "num_enum",
- "solana-program",
- "thiserror",
-]
 
 [[package]]
 name = "stable_deref_trait"
@@ -3756,6 +3744,8 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "console_log",
+ "futures 0.3.15",
+ "js-sys",
  "log",
  "reqwest",
  "serde",
@@ -3763,6 +3753,7 @@ dependencies = [
  "serde_json",
  "solana-api-types",
  "thiserror",
+ "tokio 1.8.1",
  "wasm-bindgen",
  "wasm-bindgen-futures",
 ]
@@ -3870,12 +3861,12 @@ dependencies = [
  "num-traits",
  "num_enum",
  "parity-scale-codec",
+ "solana-api-types",
  "solana-program",
  "solana-program-test",
  "solana-sdk",
  "solar",
  "solar-macros",
- "spl-token",
  "static_assertions",
  "tokio 1.8.1",
 ]
