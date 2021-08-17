@@ -20,13 +20,11 @@ pub mod syscalls;
 pub mod sysvar;
 mod transaction;
 
-pub use error::{ClientError, RpcError};
+pub use error::{ClientError, ClientErrorKind, RpcError};
 pub use instruction::InstructionError;
 pub use pubkey::Pubkey;
 pub use signature::Signature;
 pub use transaction::{TransactionError, TransactionStatus};
-
-use crate::error::ClientErrorKind;
 
 /// Epoch is a unit of time a given leader schedule is honored,
 ///  some number of Slots.

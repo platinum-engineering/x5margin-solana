@@ -2527,6 +2527,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "thiserror",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -2996,6 +2997,7 @@ dependencies = [
  "minicbor",
  "num-traits",
  "parity-scale-codec",
+ "serde",
  "solana-api-types",
  "solana-sdk",
  "static_assertions",
