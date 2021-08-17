@@ -539,6 +539,13 @@ impl MintAccount {
 
         Ok(MintAccount { account })
     }
+
+    fn wallet(&self, account: Account) -> Result<WalletAccount, solar::spl::SplReadError> {
+        let account = Box::new(account);
+        let account = self.account.wallet(account)?;
+
+        Ok(WalletAccount { account })
+    }
 }
 
 #[wasm_bindgen]
