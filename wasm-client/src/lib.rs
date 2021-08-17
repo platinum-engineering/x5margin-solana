@@ -6,15 +6,15 @@ use std::{
 use async_trait::async_trait;
 use futures::{Future, TryFutureExt};
 use js_sys::Promise;
-use serde::{de::DeserializeOwned, Deserialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
 use solana_api_types::{
-    Account, Client, ClientError, EncodedConfirmedTransaction, Pubkey, RpcError, RpcKeyedAccount,
-    RpcResponse, RpcSendTransactionConfig, RpcSignaturesForAddressConfig,
-    RpcSimulateTransactionConfig, RpcSimulateTransactionResult, Signature, SignatureInfo, Slot,
-    TransactionStatus, UiAccount,
+    Account, Client, ClientError, ClientErrorKind, EncodedConfirmedTransaction, Pubkey,
+    RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse, RpcSendTransactionConfig,
+    RpcSignaturesForAddressConfig, RpcSimulateTransactionConfig, RpcSimulateTransactionResult,
+    Signature, SignatureInfo, Slot, TransactionStatus, UiAccount,
 };
 
 struct SolanaApiClient {
@@ -87,6 +87,30 @@ impl SolanaApiClient {
         let body: JsonRpcResponse<T> = serde_json::from_value(body)?;
 
         Ok(body.result)
+    }
+
+    async fn load_wallet_account(
+        &self,
+        pubkey: Pubkey,
+        cfg: Option<RpcAccountInfoConfig>,
+    ) -> Result<WalletAccount, ClientError> {
+        let account = self.get_account_info(pubkey, cfg).await?;
+        let account = WalletAccount::any(account)
+            .map_err(|err| ClientError::from(ClientErrorKind::Custom(err.to_string())))?;
+
+        Ok(account)
+    }
+
+    async fn load_mint_account(
+        &self,
+        pubkey: Pubkey,
+        cfg: Option<RpcAccountInfoConfig>,
+    ) -> Result<MintAccount, ClientError> {
+        let account = self.get_account_info(pubkey, cfg).await?;
+        let account = MintAccount::any(account)
+            .map_err(|err| ClientError::from(ClientErrorKind::Custom(err.to_string())))?;
+
+        Ok(account)
     }
 }
 
@@ -300,8 +324,16 @@ pub struct ApiClient {
     inner: SolanaApiClient,
 }
 
-fn return_promise(fut: impl Future<Output = Result<JsValue, ClientError>> + 'static) -> Promise {
-    future_to_promise(fut.map_err(|err| err.to_string().into()))
+fn return_promise<T>(fut: impl Future<Output = Result<T, ClientError>> + 'static) -> Promise
+where
+    T: serde::Serialize,
+{
+    let fut = async move {
+        let r = fut.await?;
+        Ok::<JsValue, ClientError>(JsValue::from_serde(&r)?)
+    };
+
+    future_to_promise(fut.map_err(|err| err.into()))
 }
 
 #[wasm_bindgen]
@@ -319,7 +351,6 @@ impl ApiClient {
             let account = Pubkey::from_str(&account)?;
             let cfg = cfg.into_serde()?;
             let r = client.get_account_info(account, cfg).await?;
-            let r = JsValue::from_serde(&r)?;
 
             Ok(r)
         };
@@ -334,7 +365,6 @@ impl ApiClient {
             let program = Pubkey::from_str(&program)?;
             let cfg = cfg.into_serde()?;
             let r = client.get_program_accounts(program, cfg).await?;
-            let r = JsValue::from_serde(&r)?;
 
             Ok(r)
         };
@@ -355,7 +385,6 @@ impl ApiClient {
                 .collect();
             let cfg = cfg.into_serde()?;
             let r = client.get_multiple_accounts(&accounts, cfg).await?;
-            let r = JsValue::from_serde(&r)?;
 
             Ok(r)
         };
@@ -376,7 +405,6 @@ impl ApiClient {
                 .collect();
             let cfg = cfg.into_serde()?;
             let r = client.get_signature_statuses(&signatures, cfg).await?;
-            let r = JsValue::from_serde(&r)?;
 
             Ok(r)
         };
@@ -391,7 +419,6 @@ impl ApiClient {
             let address = Pubkey::from_str(&address)?;
             let cfg = cfg.into_serde()?;
             let r = client.get_signatures_for_address(&address, cfg).await?;
-            let r = JsValue::from_serde(&r)?;
 
             Ok(r)
         };
@@ -405,7 +432,6 @@ impl ApiClient {
         let fut = async move {
             let cfg = cfg.into_serde()?;
             let r = client.get_slot(cfg).await?;
-            let r = JsValue::from_serde(&r)?;
 
             Ok(r)
         };
@@ -420,7 +446,6 @@ impl ApiClient {
             let signature = Signature::from_str(&signature)?;
             let cfg = cfg.into_serde()?;
             let r = client.get_transaction(signature, cfg).await?;
-            let r = JsValue::from_serde(&r)?;
 
             Ok(r)
         };
@@ -437,7 +462,6 @@ impl ApiClient {
             let r = client
                 .request_airdrop(&pubkey, lamports, commitment)
                 .await?;
-            let r = JsValue::from_serde(&r)?;
 
             Ok(r)
         };
@@ -452,7 +476,6 @@ impl ApiClient {
             let transaction = transaction.into_serde()?;
             let cfg = cfg.into_serde()?;
             let r = client.send_transaction(&transaction, cfg).await?;
-            let r = JsValue::from_serde(&r)?;
 
             Ok(r)
         };
@@ -467,9 +490,36 @@ impl ApiClient {
             let transaction = transaction.into_serde()?;
             let cfg = cfg.into_serde()?;
             let r = client.simulate_transaction(&transaction, cfg).await?;
-            let r = JsValue::from_serde(&r)?;
 
             Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn load_wallet_account(&self, pubkey: String, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let pubkey = Pubkey::from_str(&pubkey)?;
+            let cfg = cfg.into_serde()?;
+
+            let wallet_account = client.load_wallet_account(pubkey, cfg).await?;
+            Ok(wallet_account)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn load_mint_account(&self, pubkey: String, cfg: JsValue) -> Promise {
+        let client = self.inner.dupe();
+
+        let fut = async move {
+            let pubkey = Pubkey::from_str(&pubkey)?;
+            let cfg = cfg.into_serde()?;
+
+            let wallet_account = client.load_mint_account(pubkey, cfg).await?;
+            Ok(wallet_account)
         };
 
         return_promise(fut)
@@ -477,13 +527,33 @@ impl ApiClient {
 }
 
 #[wasm_bindgen]
+#[derive(Serialize)]
 pub struct MintAccount {
     account: solar::spl::MintAccount<Box<Account>>,
 }
 
+impl MintAccount {
+    fn any(account: Account) -> Result<Self, solar::spl::SplReadError> {
+        let account = Box::new(account);
+        let account = solar::spl::MintAccount::any(account)?;
+
+        Ok(MintAccount { account })
+    }
+}
+
 #[wasm_bindgen]
+#[derive(Serialize)]
 pub struct WalletAccount {
     account: solar::spl::WalletAccount<Box<Account>>,
+}
+
+impl WalletAccount {
+    fn any(account: Account) -> Result<Self, solar::spl::SplReadError> {
+        let account = Box::new(account);
+        let account = solar::spl::WalletAccount::any(account)?;
+
+        Ok(WalletAccount { account })
+    }
 }
 
 #[wasm_bindgen]
