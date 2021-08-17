@@ -564,6 +564,16 @@ impl WalletAccount {
 }
 
 #[wasm_bindgen]
+pub struct StakePoolEntity {
+    entity: x5margin_program::simple_stake::StakePoolEntity<Box<Account>>,
+}
+
+#[wasm_bindgen]
+pub struct StakerTicketEntity {
+    entity: x5margin_program::simple_stake::StakerTicketEntity<Box<Account>>,
+}
+
+#[wasm_bindgen]
 pub fn init_rust_logs() {
     console_log::init().unwrap();
 }

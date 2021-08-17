@@ -109,8 +109,8 @@ pub struct InitializeArgsAccounts<B: AccountBackend> {
     pub stake_vault: WalletAccount<B>,
 }
 
-#[cfg(feature = "onchain")]
 impl<B: AccountBackend> InitializeArgsAccounts<B> {
+    #[cfg(feature = "onchain")]
     #[inline]
     pub fn from_program_input<T: AccountSource<B>>(input: &mut T) -> Result<Self, Error> {
         parse_accounts! {
