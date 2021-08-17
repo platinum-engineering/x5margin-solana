@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use anyhow::{anyhow, Result};
 
-use solana_api_types::Pubkey;
+use solana_api_types::{Pubkey, Signature, Transaction};
 
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -78,6 +78,7 @@ struct AccountData {
 #[async_trait]
 trait SolanaConnector {
     async fn get_account(&self, pk: &Pubkey) -> Result<AccountData>;
+    async fn send_transaction(&self, transaction: Transaction) -> Result<Signature>;
 }
 
 
