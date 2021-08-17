@@ -54,9 +54,7 @@ impl FromStr for Cluster {
             "t" | "testnet" => Ok(Cluster::Testnet),
             "m" | "mainnet" => Ok(Cluster::MainnetBeta),
             url if url.contains("http") => {
-                let http_url = url;
-
-                Ok(Cluster::Custom(http_url.to_string()))
+                Ok(Cluster::Custom(url.to_string()))
             }
             _ => Err(anyhow::Error::msg(
                 "you can use 'devnet' or 'testnet' or 'mainnet' or an http/https url for cluster\n",
