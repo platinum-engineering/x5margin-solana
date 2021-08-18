@@ -347,7 +347,7 @@ impl ApiClient {
 
         let fut = async move {
             let accounts: Vec<Pubkey> = accounts
-                .into_iter()
+                .iter()
                 .filter_map(|a| {
                     let s = a.as_string()?;
                     Pubkey::from_str(&s).ok()
@@ -368,7 +368,7 @@ impl ApiClient {
 
         let fut = async move {
             let signatures: Vec<Signature> = signatures
-                .into_iter()
+                .iter()
                 .filter_map(|s| {
                     let s = s.as_string()?;
                     Signature::from_str(&s).ok()

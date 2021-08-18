@@ -8,4 +8,4 @@ pub const SUCCESS: u64 = 0;
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 pub const HEAP_START_ADDRESS: usize = 0x300000000;
 /// Length of the heap memory region used for program heap.
-pub const HEAP_LENGTH: u64 = 32 * 1024;
+pub const HEAP_LENGTH: usize = 32 * 1024;

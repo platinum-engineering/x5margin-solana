@@ -5,28 +5,40 @@ use serde_json::Value;
 
 use serde::{Deserialize, Serialize};
 
-pub mod account_info;
-pub mod clock;
 pub mod entrypoint;
 mod error;
 mod faucet;
+mod hash;
 mod instruction;
+mod message;
 pub mod program;
 mod pubkey;
-pub mod rent;
 mod short_vec;
 mod signature;
-pub mod syscalls;
+mod signers;
+pub mod system;
 pub mod sysvar;
 mod transaction;
 
+#[cfg(feature = "runtime-test")]
+pub mod program_test;
+
+#[cfg(feature = "runtime-test")]
+pub mod sdk_proxy;
+
+#[cfg(feature = "crypto")]
+mod key;
+
+#[cfg(feature = "crypto")]
+pub use key::{Keypair, Signer};
+
 pub use error::{ClientError, RpcError};
-pub use instruction::InstructionError;
+pub use hash::Hash;
+pub use instruction::{Instruction, InstructionError};
 pub use pubkey::Pubkey;
 pub use signature::Signature;
-pub use transaction::{TransactionError, TransactionStatus};
-
-use crate::error::ClientErrorKind;
+pub use signers::Signers;
+pub use transaction::{Transaction, TransactionError, TransactionStatus};
 
 /// Epoch is a unit of time a given leader schedule is honored,
 ///  some number of Slots.
@@ -41,16 +53,6 @@ pub type Slot = u64;
 pub type UnixTimestamp = i64;
 
 pub const HASH_BYTES: usize = 32;
-
-#[derive(Serialize, Deserialize, Clone, Copy, Default, Eq, PartialEq, Ord, PartialOrd, Hash)]
-#[repr(transparent)]
-pub struct Hash(pub [u8; HASH_BYTES]);
-
-impl std::fmt::Debug for Hash {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", bs58::encode(self.0).into_string())
-    }
-}
 
 #[derive(Serialize, Deserialize, Default, Clone, Copy, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -84,6 +86,35 @@ pub enum CommitmentLevel {
 impl Default for CommitmentLevel {
     fn default() -> Self {
         Self::Finalized
+    }
+}
+
+/// Account metadata used to define Instructions
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+pub struct AccountMeta {
+    /// An account's public key
+    pub pubkey: Pubkey,
+    /// True if an Instruction requires a Transaction signature matching `pubkey`.
+    pub is_signer: bool,
+    /// True if the `pubkey` can be loaded as a read-write account.
+    pub is_writable: bool,
+}
+
+impl AccountMeta {
+    pub fn new(pubkey: Pubkey, is_signer: bool) -> Self {
+        Self {
+            pubkey,
+            is_signer,
+            is_writable: true,
+        }
+    }
+
+    pub fn new_readonly(pubkey: Pubkey, is_signer: bool) -> Self {
+        Self {
+            pubkey,
+            is_signer,
+            is_writable: false,
+        }
     }
 }
 
@@ -157,39 +188,6 @@ pub struct Account {
     pub rent_epoch: Epoch,
     /// public key of the account
     pub pubkey: Pubkey,
-}
-
-/// An atomic transaction
-#[derive(Debug, PartialEq, Default, Eq, Clone, Serialize, Deserialize)]
-pub struct Transaction {
-    /// A set of digital signatures of `account_keys`, `program_ids`, `recent_blockhash`, and `instructions`, signed by the first
-    /// signatures.len() keys of account_keys
-    /// NOTE: Serialization-related changes must be paired with the direct read at sigverify.
-    #[serde(with = "short_vec")]
-    pub signatures: Vec<Signature>,
-
-    /// The message to sign.
-    pub message: Message,
-}
-
-impl Transaction {
-    pub fn encode(&self, encoding: UiTransactionEncoding) -> Result<String, ClientError> {
-        let serialized = bincode::serialize(self).map_err(|e| {
-            ClientErrorKind::Custom(format!("transaction serialization failed: {}", e))
-        })?;
-        let encoded = match encoding {
-            UiTransactionEncoding::Base58 => bs58::encode(serialized).into_string(),
-            UiTransactionEncoding::Base64 => base64::encode(serialized),
-            _ => {
-                return Err(ClientErrorKind::Custom(format!(
-                    "unsupported transaction encoding: {}. Supported encodings: base58, base64",
-                    encoding
-                ))
-                .into())
-            }
-        };
-        Ok(encoded)
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::{AccountMeta, Pubkey};
+
 /// Reasons the runtime might have rejected an instruction.
 ///
 /// Instructions errors are included in the bank hashes and therefore are
@@ -175,9 +177,9 @@ pub enum InstructionError {
     #[error("Cross-program invocation with unauthorized signer or writable account")]
     PrivilegeEscalation,
 
-    /// Failed to create program execution environment
-    #[error("Failed to create program execution environment")]
-    ProgramEnvironmentSetupFailure,
+    /// Failed to create program execution AccountBackend
+    #[error("Failed to create program execution AccountBackend")]
+    ProgramAccountBackendSetupFailure,
 
     /// Program failed to complete
     #[error("Program failed to complete")]
@@ -228,4 +230,37 @@ pub enum InstructionError {
     IllegalOwner,
     // Note: For any new error added here an equivilent ProgramError and it's
     // conversions must also be added
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+pub struct Instruction {
+    /// Pubkey of the instruction processor that executes this instruction
+    pub program_id: Pubkey,
+    /// Metadata for what accounts should be passed to the instruction processor
+    pub accounts: Vec<AccountMeta>,
+    /// Opaque data passed to the instruction processor
+    pub data: Vec<u8>,
+}
+
+impl Instruction {
+    pub fn new_with_bincode<T: Serialize>(
+        program_id: Pubkey,
+        data: &T,
+        accounts: Vec<AccountMeta>,
+    ) -> Self {
+        let data = bincode::serialize(data).unwrap();
+        Self {
+            program_id,
+            accounts,
+            data,
+        }
+    }
+
+    pub fn new_with_bytes(program_id: Pubkey, data: &[u8], accounts: Vec<AccountMeta>) -> Self {
+        Self {
+            program_id,
+            accounts,
+            data: data.to_vec(),
+        }
+    }
 }

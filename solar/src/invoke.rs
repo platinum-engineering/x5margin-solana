@@ -65,7 +65,86 @@ unsafe fn sol_invoke_signed_c(
     signers_seeds_addr: *const SignerSeeds,
     signers_seeds_len: u64,
 ) -> u64 {
-    unimplemented!()
+    use std::{
+        cell::RefCell,
+        rc::Rc,
+        slice::{from_raw_parts, from_raw_parts_mut},
+    };
+
+    use solana_program::{account_info::AccountInfo, instruction::AccountMeta};
+
+    #[cfg(not(feature = "runtime-test"))]
+    {
+        unimplemented!()
+    }
+
+    #[cfg(feature = "runtime-test")]
+    {
+        let accounts = from_raw_parts(account_infos_addr, account_infos_len as usize);
+        let signers = from_raw_parts(signers_seeds_addr, signers_seeds_len as usize);
+
+        let mut infos = vec![];
+        for account in accounts {
+            let lamports = Rc::new(RefCell::new(&mut *account.lamports));
+            let data = from_raw_parts_mut(account.data, account.data_len);
+            let data = Rc::new(RefCell::new(data));
+
+            let info = AccountInfo {
+                key: &*account.key.cast(),
+                is_signer: account.is_signer,
+                is_writable: account.is_writable,
+                lamports,
+                data,
+                owner: &*account.owner.cast(),
+                executable: account.is_executable,
+                rent_epoch: account.rent_epoch,
+            };
+
+            infos.push(info)
+        }
+
+        let instruction = &*instruction_addr;
+
+        let metas = from_raw_parts(instruction.meta_addr, instruction.meta_len);
+        let data = from_raw_parts(instruction.data_addr, instruction.data_len);
+        let instruction = solana_program::instruction::Instruction {
+            program_id: *instruction.program_id.cast(),
+            accounts: metas
+                .iter()
+                .map(|m| {
+                    if m.is_writable {
+                        AccountMeta::new(*m.pubkey.cast(), m.is_signer)
+                    } else {
+                        AccountMeta::new_readonly(*m.pubkey.cast(), m.is_signer)
+                    }
+                })
+                .collect(),
+            data: data.into(),
+        };
+
+        let signers = from_raw_parts(signers_seeds_addr, signers_seeds_len as usize)
+            .iter()
+            .map(|seeds| {
+                from_raw_parts(seeds.addr, seeds.len as usize)
+                    .iter()
+                    .map(|seed| from_raw_parts(seed.addr, seed.len as usize))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let mut signers_slice = vec![];
+        for seeds in &signers {
+            signers_slice.push(seeds.as_slice());
+        }
+
+        if let Err(err) =
+            solana_program::program::invoke_signed(&instruction, &infos, &signers_slice)
+        {
+            err.into()
+        } else {
+            0
+        }
+    }
 }
 
 pub struct Invoker<'a, const N: usize> {

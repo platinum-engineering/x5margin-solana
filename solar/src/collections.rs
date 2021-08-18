@@ -2,7 +2,7 @@ use std::{
     io::{ErrorKind, Write},
     marker::PhantomData,
     mem::size_of,
-    mem::{align_of, MaybeUninit},
+    mem::{align_of, ManuallyDrop, MaybeUninit},
     ops::{Deref, DerefMut},
     ptr::drop_in_place,
     slice::{from_raw_parts, from_raw_parts_mut},
@@ -281,6 +281,71 @@ pub struct StaticVec<T, const N: usize> {
     len: u64,
 }
 
+pub struct Iter<'a, T, const N: usize> {
+    idx: usize,
+    vec: &'a StaticVec<T, N>,
+}
+
+pub struct IterMut<'a, T, const N: usize> {
+    idx: usize,
+    vec: &'a mut StaticVec<T, N>,
+}
+
+pub struct IntoIter<T, const N: usize> {
+    idx: usize,
+    vec: ManuallyDrop<StaticVec<T, N>>,
+}
+
+impl<'a, T, const N: usize> Iterator for Iter<'a, T, N> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx < self.vec.len as usize {
+            let item = unsafe { self.vec.get_unchecked(self.idx) };
+
+            self.idx += 1;
+            Some(item)
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, T, const N: usize> Iterator for IterMut<'a, T, N> {
+    type Item = &'a mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx < self.vec.len as usize {
+            let item = unsafe { &mut *(self.vec.get_unchecked_mut(self.idx) as *mut _) };
+
+            self.idx += 1;
+            Some(item)
+        } else {
+            None
+        }
+    }
+}
+impl<T, const N: usize> Iterator for IntoIter<T, N> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx < self.vec.len as usize {
+            let item = unsafe {
+                self.vec
+                    .elems
+                    .get_unchecked_mut(self.idx)
+                    .as_mut_ptr()
+                    .read()
+            };
+
+            self.idx += 1;
+            Some(item)
+        } else {
+            None
+        }
+    }
+}
+
 impl<T, const N: usize> Default for StaticVec<T, N> {
     fn default() -> Self {
         Self {
@@ -338,6 +403,26 @@ impl<T, const N: usize> StaticVec<T, N> {
         let elems = self.elems_mut_ptr();
         unsafe { vec_like_insert(&mut self.len, self.elems.len(), elems, idx, elem) }
     }
+
+    pub fn iter(&self) -> Iter<'_, T, N> {
+        Iter { idx: 0, vec: self }
+    }
+
+    pub fn iter_mut(&mut self) -> IterMut<'_, T, N> {
+        IterMut { idx: 0, vec: self }
+    }
+}
+
+impl<T, const N: usize> IntoIterator for StaticVec<T, N> {
+    type Item = T;
+    type IntoIter = IntoIter<T, N>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter {
+            idx: 0,
+            vec: ManuallyDrop::new(self),
+        }
+    }
 }
 
 impl<const N: usize> Write for StaticVec<u8, N> {
@@ -351,6 +436,8 @@ impl<const N: usize> Write for StaticVec<u8, N> {
                     .add(self.len())
                     .copy_from_nonoverlapping(writable.as_ptr(), writable.len())
             }
+
+            self.len += writable.len() as u64;
         }
 
         Ok(writable.len())
@@ -364,6 +451,8 @@ impl<const N: usize> Write for StaticVec<u8, N> {
                     .copy_from_nonoverlapping(buf.as_ptr(), buf.len())
             }
 
+            self.len += buf.len() as u64;
+
             Ok(())
         } else {
             Err(ErrorKind::Interrupted.into())
@@ -372,5 +461,15 @@ impl<const N: usize> Write for StaticVec<u8, N> {
 
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
+    }
+}
+
+impl<T, const N: usize> From<StaticVec<T, N>> for Vec<T> {
+    fn from(other: StaticVec<T, N>) -> Self {
+        let mut v = Vec::with_capacity(N);
+        for elem in other {
+            v.push(elem)
+        }
+        v
     }
 }

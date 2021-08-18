@@ -2,7 +2,7 @@ use std::{io::Write, mem::size_of, ops::Deref};
 
 #[cfg(feature = "onchain")]
 use solana_api_types::program::ProgramError;
-use solana_api_types::Pubkey;
+use solana_api_types::{system::create_account, sysvar, AccountMeta, Instruction, Pubkey};
 
 use crate::{
     account::{AccountBackend, AccountFields},
@@ -11,10 +11,10 @@ use crate::{
     log::Loggable,
     math::Checked,
     reinterpret::{is_valid_for_type, reinterpret_unchecked},
-    util::pubkey_eq,
+    util::{minimum_balance, pubkey_eq},
 };
 
-solana_api_types::declare_id!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+pub const ID: &Pubkey = &solar_macros::parse_pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
 #[repr(packed)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -258,7 +258,7 @@ impl<T: AccountBackend> TokenProgram<T> {
 
         Self::handle_result(invoker.invoke_signed(
             self.backend(),
-            &TokenInstruction::Transfer { amount }.pack(),
+            &TokenInstruction::Transfer { amount }.pack_static_vec(),
             seeds,
         ))
     }
@@ -402,8 +402,14 @@ impl TokenInstruction {
         }
     }
 
-    pub fn pack(&self) -> StaticVec<u8, 96> {
+    pub fn pack_static_vec(&self) -> StaticVec<u8, 96> {
         let mut vec = StaticVec::<u8, 96>::default();
+        self.write(&mut vec).expect("infallible");
+        vec
+    }
+
+    pub fn pack_vec(&self) -> Vec<u8> {
+        let mut vec = Vec::with_capacity(96);
         self.write(&mut vec).expect("infallible");
         vec
     }
@@ -464,5 +470,82 @@ impl Loggable for SplReadError {
 impl Loggable for TokenError {
     fn push_to_logger<const S: usize>(&self, logger: &mut crate::log::Logger<S>) {
         logger.push_str(self.into())
+    }
+}
+
+pub fn create_mint(
+    payer: &Pubkey,
+    mint: &Pubkey,
+    authority: &Pubkey,
+    decimals: u8,
+) -> [Instruction; 2] {
+    [
+        create_account(
+            payer,
+            mint,
+            minimum_balance(size_of::<Mint>() as u64),
+            size_of::<Mint>() as u64,
+            ID,
+        ),
+        initialize_mint(mint, authority, decimals),
+    ]
+}
+
+pub fn create_wallet(
+    payer: &Pubkey,
+    wallet: &Pubkey,
+    mint: &Pubkey,
+    authority: &Pubkey,
+) -> [Instruction; 2] {
+    [
+        create_account(
+            payer,
+            wallet,
+            minimum_balance(size_of::<Wallet>() as u64),
+            size_of::<Wallet>() as u64,
+            ID,
+        ),
+        initialize_wallet(wallet, mint, authority),
+    ]
+}
+
+pub fn mint_to(mint: &Pubkey, wallet: &Pubkey, authority: &Pubkey, amount: u64) -> Instruction {
+    Instruction {
+        program_id: *ID,
+        accounts: vec![
+            AccountMeta::new(*mint, false),
+            AccountMeta::new(*wallet, false),
+            AccountMeta::new_readonly(*authority, true),
+        ],
+        data: TokenInstruction::MintTo { amount }.pack_vec(),
+    }
+}
+
+pub fn initialize_mint(mint: &Pubkey, authority: &Pubkey, decimals: u8) -> Instruction {
+    Instruction {
+        program_id: *ID,
+        accounts: vec![
+            AccountMeta::new(*mint, false),
+            AccountMeta::new_readonly(*sysvar::rent::ID, false),
+        ],
+        data: TokenInstruction::InitializeMint {
+            decimals,
+            mint_authority: *authority,
+            freeze_authority: None,
+        }
+        .pack_vec(),
+    }
+}
+
+pub fn initialize_wallet(wallet: &Pubkey, mint: &Pubkey, authority: &Pubkey) -> Instruction {
+    Instruction {
+        program_id: *ID,
+        accounts: vec![
+            AccountMeta::new(*wallet, false),
+            AccountMeta::new_readonly(*mint, false),
+            AccountMeta::new_readonly(*authority, false),
+            AccountMeta::new_readonly(*sysvar::rent::ID, false),
+        ],
+        data: TokenInstruction::InitializeAccount.pack_vec(),
     }
 }

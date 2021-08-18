@@ -11,7 +11,8 @@ use std::{mem::MaybeUninit, slice::from_raw_parts};
 
 use itoap::write_to_ptr;
 
-use solana_api_types::{program::ProgramError, syscalls::sol_log};
+use solana_api_types::program::ProgramError;
+use solana_program::log::sol_log;
 
 use crate::mem::memcpy;
 
@@ -51,9 +52,17 @@ impl<const S: usize> Logger<S> {
                 sol_log_(self.buf.as_ptr().cast(), self.cursor as u64);
             }
         } else {
-            let buf = unsafe { from_raw_parts(self.buf.as_ptr().cast::<u8>(), self.cursor) };
-            let output = String::from_utf8_lossy(buf);
-            sol_log(&output);
+            #[cfg(feature = "runtime-test")]
+            {
+                let buf = unsafe { from_raw_parts(self.buf.as_ptr().cast::<u8>(), self.cursor) };
+                let output = String::from_utf8_lossy(buf);
+                sol_log(&output);
+            }
+
+            #[cfg(not(feature = "runtime-test"))]
+            {
+                panic!("unsupported");
+            }
         }
     }
 }
