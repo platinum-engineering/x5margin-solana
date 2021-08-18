@@ -22,8 +22,6 @@ use solar::{
 #[cfg(feature = "onchain")]
 use solar_macros::parse_accounts;
 
-#[cfg(feature = "onchain")]
-use crate::data::EntityHeader;
 use crate::{
     data::{AccountType, Entity, EntityAllocator, EntityKind, HEADER_RESERVED},
     error::Error,
@@ -145,8 +143,8 @@ pub struct StakeArgsAccounts<B: AccountBackend> {
     pub token_program: TokenProgram<B>,
 
     pub pool: Entity<B, StakePool>,
-    pub ticket: Entity<B, StakerTicket>,
     pub staker: B,
+    pub ticket: Entity<B, StakerTicket>,
     pub stake_vault: WalletAccount<B>,
     pub source_authority: B,
     pub source_wallet: WalletAccount<B>,
@@ -291,7 +289,6 @@ where
             ],
             input.program_id(),
         )
-        .ok()
         .bpf_expect("couldn't derive program authority");
 
         if !pubkey_eq(program_authority.key(), &expected_program_authority) {
@@ -412,9 +409,8 @@ where
         Ok(wallet)
     }
 
-    #[cfg(feature = "onchain")]
     #[inline]
-    fn load_ticket(&self, ticket: B) -> Result<Entity<B, StakerTicket>, Error> {
+    pub fn load_ticket(&self, ticket: B) -> Result<Entity<B, StakerTicket>, Error> {
         let ticket = Entity::<B, StakerTicket>::raw_any(self.account().owner(), ticket)?;
         if ticket.header().kind == EntityKind::SimpleStakeTicket {
             if !ticket.is_child(self) {
@@ -616,7 +612,7 @@ where
 
         let staked_amount = ticket.staked_amount.to_u64f64();
         let stake_acquired_amount = pool.stake_acquired_amount.to_u64f64();
-        let reward_amount = pool.deposited_reward_amount.to_u64f64();
+        let reward_amount = pool.reward_amount.to_u64f64();
 
         let share = staked_amount / stake_acquired_amount;
         let reward_share = share * reward_amount;

@@ -10,7 +10,19 @@ use solana_api_types::Pubkey;
 
 use crate::{log::Loggable, util::AsPubkey};
 
-use super::{AccountBackend, AccountFields, AccountFieldsMut};
+use super::{AccountBackend, AccountFields, AccountFieldsMut, Environment};
+
+pub struct Onchain;
+
+impl Environment for Onchain {
+    fn supports_syscalls() -> bool {
+        true
+    }
+
+    fn is_native() -> bool {
+        !cfg!(target_arch = "bpf")
+    }
+}
 
 #[repr(C)]
 pub struct Account {
@@ -81,6 +93,7 @@ impl AccountFieldsMut for Account {
 
 impl<'a> AccountBackend for &'a mut Account {
     type Impl = Account;
+    type Env = Onchain;
 
     #[inline]
     fn backend(&self) -> &Self::Impl {

@@ -1,6 +1,6 @@
 [package]
 edition = "2018"
-name = "x5margin-program"
+name = "token-locker"
 version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -10,7 +10,6 @@ onchain = ["solar/onchain"]
 
 [dependencies]
 az = "1.1.1"
-borsh = "0.9.1"
 num-traits = "0.2.14"
 num_enum = "0.5"
 static_assertions = "1.1.0"

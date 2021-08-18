@@ -7,11 +7,11 @@
 //! without using the heap or zero-initializing the memory. Allocating memory in this way is effectively free,
 //! though limited to BPF's stack size restrictions.
 
-use std::{mem::MaybeUninit, slice::from_raw_parts};
+use std::mem::MaybeUninit;
 
 use itoap::write_to_ptr;
 
-use solana_api_types::{program::ProgramError, syscalls::sol_log};
+use solana_api_types::program::ProgramError;
 
 use crate::mem::memcpy;
 
@@ -51,9 +51,21 @@ impl<const S: usize> Logger<S> {
                 sol_log_(self.buf.as_ptr().cast(), self.cursor as u64);
             }
         } else {
-            let buf = unsafe { from_raw_parts(self.buf.as_ptr().cast::<u8>(), self.cursor) };
+            let buf = unsafe {
+                std::slice::from_raw_parts(self.buf.as_ptr().cast::<u8>(), self.cursor)
+            };
             let output = String::from_utf8_lossy(buf);
-            sol_log(&output);
+
+            #[cfg(feature = "runtime-test")]
+            {
+
+                solana_program::log::sol_log(&output);
+            }
+
+            #[cfg(not(feature = "runtime-test"))]
+            {
+                solana_api_types::syscalls::sol_log(&output)
+            }
         }
     }
 }

@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
-use solana_api_types::{rent::Rent, sysvar::Sysvar, Pubkey};
+use solana_api_types::{sysvar::rent::Rent, sysvar::Sysvar, Pubkey};
 use solar::{
-    account::{AccountBackend, AccountFields, AccountFieldsMut},
+    account::{AccountBackend, AccountFields, AccountFieldsMut, Environment},
     reinterpret::{reinterpret_mut_unchecked, reinterpret_unchecked},
     util::{is_rent_exempt_fixed_arithmetic, minimum_balance, ResultExt},
 };
@@ -14,9 +14,9 @@ pub const HEADER_RESERVED: usize = 96;
 #[macro_export]
 macro_rules! impl_entity_simple_deref {
     ($entity:ident, $target:ident) => {
-        impl<B> std::ops::Deref for Entity<B, $entity>
+        impl<E> std::ops::Deref for Entity<E, $entity>
         where
-            B: solar::account::AccountBackend,
+            E: solar::account::AccountBackend,
         {
             type Target = $target;
 
@@ -26,10 +26,10 @@ macro_rules! impl_entity_simple_deref {
             }
         }
 
-        impl<B> std::ops::DerefMut for Entity<B, $entity>
+        impl<E> std::ops::DerefMut for Entity<E, $entity>
         where
-            B: solar::account::AccountBackend,
-            B::Impl: solar::account::AccountFieldsMut,
+            E: solar::account::AccountBackend,
+            E::Impl: solar::account::AccountFieldsMut,
         {
             #[inline]
             fn deref_mut(&mut self) -> &mut Self::Target {
@@ -125,9 +125,9 @@ where
         }
 
         // require all entities to be rent-exempt to be valid
-        if !entity.is_rent_exempt(&Rent::get().bpf_unwrap()) {
+        if B::Env::supports_syscalls() && !entity.is_rent_exempt(&Rent::get().bpf_unwrap()) {
             return Err(Error::NotRentExempt);
-        }
+        };
 
         Ok(entity)
     }

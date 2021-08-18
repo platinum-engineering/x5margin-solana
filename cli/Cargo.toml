@@ -1,0 +1,14 @@
+[package]
+edition = "2018"
+name = "cli"
+version = "0.1.0"
+
+[dependencies]
+solar = { path = "../solar" }
+x5margin-program = { path = "../program" }
+solana-api-types = { path = "../solana-api-types" }
+solana-rpc-client = { path = "../jsonrpc-client" }
+
+tokio = { version = "1.7.1", features = ["full"] }
+
+[dev-dependencies]

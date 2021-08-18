@@ -22,8 +22,19 @@ pub trait AccountFieldsMut: AccountFields {
     fn data_mut(&mut self) -> &mut [u8];
 }
 
+pub trait Environment {
+    fn supports_syscalls() -> bool {
+        false
+    }
+
+    fn is_native() -> bool {
+        true
+    }
+}
+
 pub trait AccountBackend {
     type Impl: AccountFields;
+    type Env: Environment;
 
     fn backend(&self) -> &Self::Impl;
 
@@ -89,6 +100,7 @@ macro_rules! forward_account_backend {
             B: AccountBackend,
         {
             type Impl = <B as AccountBackend>::Impl;
+            type Env = <B as AccountBackend>::Env;
 
             fn backend(&self) -> &Self::Impl {
                 self.$f.backend()

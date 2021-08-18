@@ -1,6 +1,18 @@
 use solana_api_types::Account;
 
-use super::{AccountBackend, AccountFields, AccountFieldsMut};
+use super::{AccountBackend, AccountFields, AccountFieldsMut, Environment};
+
+pub struct Offchain;
+
+impl Environment for Offchain {
+    fn supports_syscalls() -> bool {
+        false
+    }
+
+    fn is_native() -> bool {
+        true
+    }
+}
 
 impl AccountFields for Account {
     fn key(&self) -> &solana_api_types::Pubkey {
@@ -50,6 +62,7 @@ impl AccountFieldsMut for Account {
 // trait but cannot afford to have lifetimes -- wasm-bindgen can't do that yet.
 impl AccountBackend for Box<Account> {
     type Impl = Account;
+    type Env = Offchain;
 
     fn backend(&self) -> &Self::Impl {
         self

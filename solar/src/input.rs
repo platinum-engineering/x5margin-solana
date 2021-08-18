@@ -4,10 +4,7 @@ use std::{
     slice::from_raw_parts,
 };
 
-use solana_api_types::{
-    account_info::AccountInfo, entrypoint::MAX_PERMITTED_DATA_INCREASE, program::ProgramResult,
-    Pubkey,
-};
+use solana_api_types::{entrypoint::MAX_PERMITTED_DATA_INCREASE, program::ProgramResult, Pubkey};
 
 use crate::{
     account::onchain::{Account, AccountRef},
@@ -31,15 +28,15 @@ pub trait AccountSource<B: AccountBackend>: ProgramInput {
 }
 
 pub struct BpfProgramInput {
-    program_id: &'static Pubkey,
-    accounts: ProgramAccounts,
-    data: &'static [u8],
+    pub(crate) program_id: &'static Pubkey,
+    pub(crate) accounts: ProgramAccounts,
+    pub(crate) data: &'static [u8],
 }
 
 pub struct ProgramAccounts {
-    accounts: &'static mut [MaybeUninit<Account>; MAX_ACCOUNTS],
-    len: usize,
-    cursor: usize,
+    pub(crate) accounts: &'static mut [MaybeUninit<Account>; MAX_ACCOUNTS],
+    pub(crate) len: usize,
+    pub(crate) cursor: usize,
 }
 
 #[repr(C)]
@@ -220,11 +217,12 @@ pub trait Entrypoint {
     fn call(input: BpfProgramInput) -> ProgramResult;
 }
 
+#[cfg(feature = "runtime-test")]
 pub fn wrapped_entrypoint<T: Entrypoint>(
-    program_id: &Pubkey,
-    account_infos: &[AccountInfo],
+    program_id: &solana_program::pubkey::Pubkey,
+    account_infos: &[solana_program::account_info::AccountInfo],
     data: &[u8],
-) -> ProgramResult {
+) -> Result<(), solana_program::program_error::ProgramError> {
     if account_infos.len() > MAX_ACCOUNTS {
         panic!("too many accounts");
     }
@@ -234,13 +232,14 @@ pub fn wrapped_entrypoint<T: Entrypoint>(
         unsafe {
             let mut lamports = info.lamports.borrow_mut();
             let lamports = (&mut **lamports) as *mut u64;
+            let data_len = info.data_len();
 
             accounts_array[i].as_mut_ptr().write(Account {
-                key: info.key,
+                key: info.key as *const _ as *const Pubkey,
                 lamports,
-                data_len: info.data_len(),
+                data_len,
                 data: info.data.borrow_mut().as_mut_ptr(),
-                owner: info.owner,
+                owner: info.owner as *const _ as *const Pubkey,
                 rent_epoch: info.rent_epoch,
                 is_signer: info.is_signer,
                 is_writable: info.is_writable,
@@ -256,31 +255,10 @@ pub fn wrapped_entrypoint<T: Entrypoint>(
     };
 
     let input = BpfProgramInput {
-        program_id: unsafe { &*(program_id as *const Pubkey) },
+        program_id: unsafe { &*(program_id as *const _ as *const Pubkey) },
         accounts,
         data: unsafe { &*(data as *const [u8]) },
     };
 
-    T::call(input)
+    T::call(input).map_err(|err| solana_program::program_error::ProgramError::from(u64::from(err)))
 }
-
-// impl<'a> Account<'a> {
-//     pub fn into_account_info(self) -> AccountInfo<'a> {
-//         let data = self.data;
-//         let lamports = self.lamports;
-
-//         let data = Rc::new(RefCell::new(data));
-//         let lamports = Rc::new(RefCell::new(lamports));
-
-//         AccountInfo {
-//             key: self.key,
-//             is_signer: self.is_signer,
-//             is_writable: self.is_writable,
-//             lamports,
-//             data,
-//             owner: self.owner,
-//             executable: self.executable,
-//             rent_epoch: self.rent_epoch,
-//         }
-//     }
-// }

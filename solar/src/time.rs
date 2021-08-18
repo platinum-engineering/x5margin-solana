@@ -2,6 +2,7 @@ use chrono::{DateTime, Duration, TimeZone, Utc};
 
 #[repr(C)]
 #[derive(
+    Debug,
     Default,
     Clone,
     Copy,
@@ -9,14 +10,10 @@ use chrono::{DateTime, Duration, TimeZone, Utc};
     Eq,
     PartialOrd,
     Ord,
-    minicbor::Encode,
-    minicbor::Decode,
     parity_scale_codec::Encode,
     parity_scale_codec::Decode,
 )]
-#[cbor(transparent)]
 pub struct SolTimestamp {
-    #[n(0)]
     ts: i64,
 }
 

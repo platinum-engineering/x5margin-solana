@@ -4,12 +4,14 @@ cargo-features = ["named-profiles"]
 members = [
     "program",
     "program-so",
+    "cli",
     "disassembler",
     "wasm-client",
     "solana-api-types",
     "jsonrpc-client",
     "solar", 
     "solar-macros", 
+    "locker",
 ]
 
 [profile.bpf-release]

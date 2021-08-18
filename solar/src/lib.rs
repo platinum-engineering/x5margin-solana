@@ -25,9 +25,6 @@ pub mod spl;
 pub mod time;
 pub mod util;
 
-#[cfg(feature = "test")]
-pub mod test;
-
 pub mod prelude {
     pub use crate::account::AccountBackend;
 }
