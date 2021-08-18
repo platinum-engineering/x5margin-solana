@@ -16,6 +16,7 @@ mod pubkey;
 mod short_vec;
 mod signature;
 mod signers;
+pub mod syscalls;
 pub mod system;
 pub mod sysvar;
 mod transaction;
@@ -26,13 +27,12 @@ pub mod program_test;
 #[cfg(feature = "runtime-test")]
 pub mod sdk_proxy;
 
-#[cfg(feature = "crypto")]
 mod key;
-
 #[cfg(feature = "crypto")]
-pub use key::{Keypair, Signer};
+pub use key::Keypair;
+pub use key::Signer;
 
-pub use error::{ClientError, RpcError};
+pub use error::{ClientError, ClientErrorKind, RpcError};
 pub use hash::Hash;
 pub use instruction::{Instruction, InstructionError};
 pub use pubkey::Pubkey;

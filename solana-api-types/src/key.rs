@@ -1,10 +1,16 @@
-use std::convert::TryInto;
-
-use rand::{rngs::OsRng, CryptoRng, RngCore};
-
 use crate::{signature::SignerError, Pubkey, Signature};
-use ed25519_dalek::Signer as _;
 
+#[cfg(feature = "crypto")]
+mod crypto_imports {
+    pub use ed25519_dalek::Signer as _;
+    pub use rand::{rngs::OsRng, CryptoRng, RngCore};
+    pub use std::convert::TryInto;
+}
+
+#[cfg(feature = "crypto")]
+use crypto_imports::*;
+
+#[cfg(feature = "crypto")]
 /// A vanilla Ed25519 key pair
 #[derive(Debug)]
 pub struct Keypair(ed25519_dalek::Keypair);
@@ -29,6 +35,7 @@ pub trait Signer {
     fn try_sign_message(&self, message: &[u8]) -> Result<Signature, SignerError>;
 }
 
+#[cfg(feature = "crypto")]
 impl Keypair {
     /// Constructs a new, random `Keypair` using a caller-proveded RNG
     pub fn generate<R>(csprng: &mut R) -> Self
@@ -70,6 +77,7 @@ impl Keypair {
     }
 }
 
+#[cfg(feature = "crypto")]
 impl Signer for Keypair {
     fn pubkey(&self) -> Pubkey {
         Pubkey::new(self.0.public.as_ref().try_into().expect("infallible"))

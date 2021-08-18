@@ -1,4 +1,6 @@
-use super::{AccountBackend, AccountFields, Environment};
+use solana_api_types::Account;
+
+use super::{AccountBackend, AccountFields, AccountFieldsMut, Environment};
 
 pub struct Offchain;
 
@@ -12,7 +14,7 @@ impl Environment for Offchain {
     }
 }
 
-impl AccountFields for solana_api_types::Account {
+impl AccountFields for Account {
     fn key(&self) -> &solana_api_types::Pubkey {
         &self.pubkey
     }
@@ -42,12 +44,24 @@ impl AccountFields for solana_api_types::Account {
     }
 
     fn data(&self) -> &[u8] {
-        &self.data
+        self.data.as_slice()
     }
 }
 
-impl AccountBackend for &solana_api_types::Account {
-    type Impl = solana_api_types::Account;
+impl AccountFieldsMut for Account {
+    fn set_lamports(&mut self, value: u64) {
+        self.lamports = value;
+    }
+
+    fn data_mut(&mut self) -> &mut [u8] {
+        self.data.as_mut_slice()
+    }
+}
+
+// `Box` here b/c we want to allow some indirection to implement
+// trait but cannot afford to have lifetimes -- wasm-bindgen can't do that yet.
+impl AccountBackend for Box<Account> {
+    type Impl = Account;
     type Env = Offchain;
 
     fn backend(&self) -> &Self::Impl {
@@ -55,7 +69,7 @@ impl AccountBackend for &solana_api_types::Account {
     }
 
     fn backend_mut(&mut self) -> &mut Self::Impl {
-        unimplemented!()
+        self
     }
 }
 

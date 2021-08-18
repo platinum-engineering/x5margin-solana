@@ -2569,6 +2569,7 @@ dependencies = [
  "solana-sdk",
  "solar-macros",
  "thiserror",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -3825,10 +3826,12 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "solana-api-types",
+ "solar",
  "thiserror",
  "tokio 1.9.0",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "x5margin-program",
 ]
 
 [[package]]

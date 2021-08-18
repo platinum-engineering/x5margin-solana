@@ -38,26 +38,43 @@ pub trait Sysvar:
 #[macro_export]
 macro_rules! impl_sysvar_get {
     ($sysvar_struct:ident, $sysvar_mod:ident, $syscall_name:ident) => {
-        fn get() -> Result<Self, crate::program::ProgramError> {
-            #[cfg(feature = "runtime-test")]
-            use crate::sdk_proxy::FromSdk;
-            #[cfg(feature = "runtime-test")]
-            use solana_sdk::sysvar::Sysvar;
+        #[cfg(target_arch = "bpf")]
+        fn get() -> Result<Self, ProgramError> {
+            let mut var = Self::default();
+            let var_addr = &mut var as *mut _ as *mut u8;
 
-            #[cfg(target_arch = "bpf")]
             let result = unsafe {
-                let mut var = Self::default();
-                let var_addr = &mut var as *mut _ as *mut u8;
                 extern "C" {
                     fn $syscall_name(var_addr: *mut u8) -> u64;
                 }
                 $syscall_name(var_addr)
             };
 
-            #[cfg(all(not(target_arch = "bpf"), feature = "runtime-test"))]
+            match result {
+                $crate::entrypoint::SUCCESS => Ok(var),
+                e => Err(e.into()),
+            }
+        }
+
+        #[cfg(all(not(target_arch = "bpf"), feature = "runtime-test"))]
+        fn get() -> Result<Self, $crate::program::ProgramError> {
+            use crate::sdk_proxy::FromSdk;
+            use solana_sdk::sysvar::Sysvar;
+
             solana_program::sysvar::$sysvar_mod::$sysvar_struct::get()
                 .map(|s| $sysvar_struct::from_sdk(&s))
                 .map_err(|err| crate::program::ProgramError::from_sdk(&err))
+        }
+
+        #[cfg(not(target_arch = "bpf"))]
+        fn get() -> Result<Self, $crate::program::ProgramError> {
+            let mut var = Self::default();
+            let var_addr = &mut var as *mut _ as *mut u8;
+
+            match $crate::syscalls::$syscall_name(var_addr) {
+                $crate::entrypoint::SUCCESS => Ok(var),
+                e => Err(e.into()),
+            }
         }
     };
 }

@@ -1,8 +1,10 @@
 //! The `hash` module provides functions for creating SHA-256 hashes.
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::{convert::TryFrom, fmt, mem, str::FromStr};
 use thiserror::Error;
+
+#[cfg(feature = "crypto")]
+pub use hasher::*;
 
 pub const HASH_BYTES: usize = 32;
 /// Maximum string length of a base58 encoded hash
@@ -11,24 +13,31 @@ const MAX_BASE58_LEN: usize = 44;
 #[repr(transparent)]
 pub struct Hash(pub [u8; HASH_BYTES]);
 
-#[derive(Clone, Default)]
-pub struct Hasher {
-    hasher: Sha256,
-}
+#[cfg(feature = "crypto")]
+mod hasher {
+    use sha2::{Digest, Sha256};
 
-impl Hasher {
-    pub fn hash(&mut self, val: &[u8]) {
-        self.hasher.update(val);
+    use super::*;
+
+    #[derive(Clone, Default)]
+    pub struct Hasher {
+        hasher: Sha256,
     }
-    pub fn hashv(&mut self, vals: &[&[u8]]) {
-        for val in vals {
-            self.hash(val);
+
+    impl Hasher {
+        pub fn hash(&mut self, val: &[u8]) {
+            self.hasher.update(val);
         }
-    }
-    pub fn result(self) -> Hash {
-        // At the time of this writing, the sha2 library is stuck on an old version
-        // of generic_array (0.9.0). Decouple ourselves with a clone to our version.
-        Hash(<[u8; HASH_BYTES]>::try_from(self.hasher.finalize().as_slice()).unwrap())
+        pub fn hashv(&mut self, vals: &[&[u8]]) {
+            for val in vals {
+                self.hash(val);
+            }
+        }
+        pub fn result(self) -> Hash {
+            // At the time of this writing, the sha2 library is stuck on an old version
+            // of generic_array (0.9.0). Decouple ourselves with a clone to our version.
+            Hash(<[u8; HASH_BYTES]>::try_from(self.hasher.finalize().as_slice()).unwrap())
+        }
     }
 }
 

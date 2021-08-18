@@ -348,6 +348,7 @@ impl Transaction {
             .collect())
     }
 
+    #[cfg(feature = "crypto")]
     /// Verify the transaction
     pub fn verify(&self) -> Result<()> {
         let message_bytes = self.message_data();
@@ -362,10 +363,12 @@ impl Transaction {
         }
     }
 
+    #[cfg(feature = "crypto")]
     pub fn verify_with_results(&self) -> Vec<bool> {
         self._verify_with_results(&self.message_data())
     }
 
+    #[cfg(feature = "crypto")]
     pub(crate) fn _verify_with_results(&self, message_bytes: &[u8]) -> Vec<bool> {
         self.signatures
             .iter()

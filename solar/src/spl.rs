@@ -149,9 +149,33 @@ pub struct MintAccount<B: AccountBackend> {
     account: B,
 }
 
+impl<B> serde::Serialize for MintAccount<B>
+where
+    B: AccountBackend + serde::Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.account.serialize(serializer)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WalletAccount<B: AccountBackend> {
     account: B,
+}
+
+impl<B> serde::Serialize for WalletAccount<B>
+where
+    B: AccountBackend + serde::Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.account.serialize(serializer)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

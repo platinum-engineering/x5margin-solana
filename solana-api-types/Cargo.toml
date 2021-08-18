@@ -44,6 +44,7 @@ thiserror = "1.0"
 # zstd = {version = "0.5", features = ["wasm"]}
 lazy_static = "1.4"
 ruzstd = "0.2"
+wasm-bindgen = "0.2"
 itertools = "0.10"
 
 solar-macros = {path = "../solar-macros"}

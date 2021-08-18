@@ -1,4 +1,5 @@
 use thiserror::Error;
+use wasm_bindgen::JsValue;
 
 use crate::{
     faucet::FaucetError,
@@ -254,5 +255,12 @@ impl From<ParseSignatureError> for ClientError {
             request: None,
             kind: err.into(),
         }
+    }
+}
+
+impl Into<JsValue> for ClientError {
+    fn into(self) -> JsValue {
+        let s = self.to_string();
+        JsValue::from_str(s.as_str())
     }
 }
