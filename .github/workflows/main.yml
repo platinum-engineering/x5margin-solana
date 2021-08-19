@@ -1,0 +1,21 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build-wasm32:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly-2021-08-04
+          target: wasm32-unknown-unknown
+          profile: minimal
+      - uses: actions-rs/cargo@v1
+        with:
+          working-directory: ./wasm-client
+          command: build
+          args: --target wasm32-unknown-unknown
