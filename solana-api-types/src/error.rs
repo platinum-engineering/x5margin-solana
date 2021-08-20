@@ -139,6 +139,7 @@ pub enum RpcError {
 pub enum ClientErrorKind {
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[cfg(feature = "rpc")]
     #[error(transparent)]
     Reqwest(#[from] reqwest::Error),
     #[error(transparent)]
@@ -186,6 +187,7 @@ impl From<std::io::Error> for ClientError {
     }
 }
 
+#[cfg(feature = "rpc")]
 impl From<reqwest::Error> for ClientError {
     fn from(err: reqwest::Error) -> Self {
         Self {

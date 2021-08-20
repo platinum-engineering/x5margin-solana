@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export SDK_DIR="$HOME/.local/share/solana/install/active_release/solana-release/bin/sdk/bpf"
+export SDK_DIR="$HOME/.local/share/solana/install/active_release/bin/sdk/bpf"
 export LLVM_DIR="$SDK_DIR/dependencies/bpf-tools/llvm/bin"
 export RUSTC_BIN="$SDK_DIR/dependencies/bpf-tools/rust/bin/rustc"
 

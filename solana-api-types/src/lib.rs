@@ -1,4 +1,4 @@
-use std::{fmt, io::Read, str::FromStr};
+use std::fmt;
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -209,7 +209,10 @@ pub struct UiAccount {
 }
 
 impl UiAccount {
+    #[cfg(feature = "rpc")]
     pub fn decode(&self, pubkey: Pubkey) -> Option<Account> {
+        use std::{io::Read, str::FromStr};
+
         let data = match &self.data {
             UiAccountData::Json(_) => None,
             UiAccountData::LegacyBinary(blob) => bs58::decode(blob).into_vec().ok(),

@@ -6,7 +6,7 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-onchain = ["solar/onchain"]
+onchain = ["solar/onchain", "solana-api-types/onchain", "getrandom"]
 
 [dependencies]
 az = "1.1.1"
@@ -16,16 +16,17 @@ num_enum = "0.5"
 static_assertions = "1.1.0"
 
 fixed = {version = "1.9.0", features = ["num-traits"]}
+getrandom = {version = "0.1.14", features = ["dummy"], optional = true}
 parity-scale-codec = {version = "1.3.7", features = ["derive"]}
-solana-api-types = {path = "../solana-api-types"}
+solana-api-types = {path = "../solana-api-types", default-features = false}
 solar = {path = "../solar", features = ["sol-mem-intrinsics"]}
 solar-macros = {path = "../solar-macros"}
 
 [dev-dependencies]
 anyhow = "1"
-solana-program = "1.7"
-solana-program-test = "1.7.2"
-solana-sdk = "1.7.2"
+solana-program = "= 1.7.2"
+solana-program-test = "= 1.7.2"
+solana-sdk = "= 1.7.2"
 tokio = "1.8"
 
 solana-api-types = {path = "../solana-api-types", features = ["crypto", "runtime-test"]}

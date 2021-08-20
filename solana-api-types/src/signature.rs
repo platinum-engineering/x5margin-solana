@@ -28,8 +28,8 @@ impl Serialize for Signature {
         S: serde::Serializer,
     {
         let mut array = serializer.serialize_tuple(64)?;
-        for i in self.0 {
-            array.serialize_element(&i)?;
+        for i in self.0.into_iter() {
+            array.serialize_element(i)?;
         }
         array.end()
     }
