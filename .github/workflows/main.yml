@@ -27,6 +27,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly-2021-08-04
+          profile: minimal
+          override: true
       - run: |
           sh -c "$(curl -sSfL https://release.solana.com/v1.7.2/install)"
           export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
