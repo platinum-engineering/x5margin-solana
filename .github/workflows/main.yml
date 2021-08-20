@@ -31,5 +31,4 @@ jobs:
           sh -c "$(curl -sSfL https://release.solana.com/v1.7.2/install)"
           solana --version
           cargo build-bpf
-        with:
-          working-directory: ./program-so
+        working-directory: ./program-so
