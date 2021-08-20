@@ -6,7 +6,6 @@ jobs:
   build-test-wasm32:
     runs-on: ubuntu-latest
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
@@ -23,3 +22,14 @@ jobs:
         with:
           command: test
           args: -p wasm-client
+
+  build-test-bpf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          sh -c "$(curl -sSfL https://release.solana.com/v1.7.2/install)"
+          solana --version
+          cargo build-bpf
+        with:
+          working-directory: ./program-so
