@@ -547,13 +547,26 @@ impl RawPoolClient {
     async fn load_stake_pool(
         &self,
         program: Pubkey,
-        pool: Pubkey,
+        stake_pool: Pubkey,
     ) -> Result<StakePoolEntity, ClientError> {
-        let pool = self.inner.get_account_info(pool, None).await?;
-        let stake_pool = StakePoolEntity::load(&program, Box::new(pool))
+        let stake_pool = self.inner.get_account_info(stake_pool, None).await?;
+        let stake_pool = StakePoolEntity::load(&program, Box::new(stake_pool))
             .map_err(|err| ClientError::from(ClientErrorKind::Custom(err.to_string())))?;
 
         Ok(stake_pool)
+    }
+
+    async fn load_staker_ticket(
+        &self,
+        ticket: Pubkey,
+        stake_pool: &StakePoolEntity,
+    ) -> Result<StakerTicketEntity, ClientError> {
+        let ticket = self.inner.get_account_info(ticket, None).await?;
+        let ticket = stake_pool
+            .load_ticket(Box::new(ticket))
+            .map_err(|err| ClientError::from(ClientErrorKind::Custom(err.to_string())))?;
+
+        Ok(ticket)
     }
 }
 
@@ -591,11 +604,45 @@ impl PoolClient {
 
         return_promise(fut)
     }
+
+    pub fn load_stake_pool(&self, program: String, stake_pool: String) -> Promise {
+        let client = self.inner.clone();
+
+        let fut = async move {
+            let program = Pubkey::from_str(&program)?;
+            let stake_pool = Pubkey::from_str(&stake_pool)?;
+            let stake_pool = client.load_stake_pool(program, stake_pool).await?;
+            Ok(stake_pool)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn load_staker_ticket(&self, ticket: String, stake_pool: StakePoolEntity) -> Promise {
+        let client = self.inner.clone();
+
+        let fut = async move {
+            let ticket = Pubkey::from_str(&ticket)?;
+            let ticket = client.load_staker_ticket(ticket, &stake_pool).await?;
+            Ok(ticket)
+        };
+
+        return_promise(fut)
+    }
 }
 
 #[wasm_bindgen]
 pub struct StakePoolEntity {
     entity: x5margin_program::simple_stake::StakePoolEntity<Box<Account>>,
+}
+
+impl Serialize for StakePoolEntity {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.entity.account().serialize(serializer)
+    }
 }
 
 impl StakePoolEntity {
@@ -607,11 +654,29 @@ impl StakePoolEntity {
 
         Ok(Self { entity: stake_pool })
     }
+
+    pub fn load_ticket(
+        &self,
+        ticket: Box<Account>,
+    ) -> Result<StakerTicketEntity, x5margin_program::error::Error> {
+        self.entity
+            .load_ticket(ticket)
+            .map(|entity| StakerTicketEntity { entity })
+    }
 }
 
 #[wasm_bindgen]
 pub struct StakerTicketEntity {
     entity: x5margin_program::simple_stake::StakerTicketEntity<Box<Account>>,
+}
+
+impl Serialize for StakerTicketEntity {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.entity.account().serialize(serializer)
+    }
 }
 
 #[wasm_bindgen]
