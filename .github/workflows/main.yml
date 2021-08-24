@@ -38,5 +38,5 @@ jobs:
           export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
           solana --version
           cargo build-bpf
-          cargo +bpf build -Z unstable-options --target bpfel-unknown-unknown --profile bpf-release
+          # cargo +bpf build -Z unstable-options --target bpfel-unknown-unknown --profile bpf-release
         working-directory: ./program-so
