@@ -36,6 +36,6 @@ jobs:
           sh -c "$(curl -sSfL https://release.solana.com/v1.7.2/install)"
           export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
           solana --version
-          rustup toolchain list -v
+          ls $HOME/.local/share/solana/install/active_release/bin/sdk/
           cargo +bpf build -Z unstable-options --target bpfel-unknown-unknown --profile bpf-release
         working-directory: ./program-so
