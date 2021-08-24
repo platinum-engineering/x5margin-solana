@@ -543,6 +543,18 @@ impl RawPoolClient {
 
         Ok(account)
     }
+
+    async fn load_stake_pool(
+        &self,
+        program: Pubkey,
+        pool: Pubkey,
+    ) -> Result<StakePoolEntity, ClientError> {
+        let pool = self.inner.get_account_info(pool, None).await?;
+        let stake_pool = StakePoolEntity::load(&program, Box::new(pool))
+            .map_err(|err| ClientError::from(ClientErrorKind::Custom(err.to_string())))?;
+
+        Ok(stake_pool)
+    }
 }
 
 #[wasm_bindgen]
@@ -584,6 +596,17 @@ impl PoolClient {
 #[wasm_bindgen]
 pub struct StakePoolEntity {
     entity: x5margin_program::simple_stake::StakePoolEntity<Box<Account>>,
+}
+
+impl StakePoolEntity {
+    pub fn load(
+        program: &Pubkey,
+        pool: Box<Account>,
+    ) -> Result<Self, x5margin_program::error::Error> {
+        let stake_pool = x5margin_program::simple_stake::StakePoolEntity::load(program, pool)?;
+
+        Ok(Self { entity: stake_pool })
+    }
 }
 
 #[wasm_bindgen]

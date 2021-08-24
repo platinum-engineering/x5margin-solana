@@ -14,6 +14,8 @@ use solar::util::ResultExt;
 
 #[macro_use]
 extern crate static_assertions;
+#[macro_use]
+extern crate strum;
 
 pub mod complex;
 pub mod data;
@@ -340,8 +342,7 @@ mod test {
                     AccountMeta::new_readonly(stake_mint_key.pubkey(), false),
                     AccountMeta::new_readonly(stake_vault_key.pubkey(), false),
                 ],
-                data: Method::Simple(simple_stake::Method::Stake{amount: amount})
-                .encode(),
+                data: Method::Simple(simple_stake::Method::Stake { amount: amount }).encode(),
             },
         ];
 
@@ -446,8 +447,7 @@ mod test {
                     AccountMeta::new_readonly(stake_mint_key.pubkey(), false),
                     AccountMeta::new_readonly(stake_vault_key.pubkey(), false),
                 ],
-                data: Method::Simple(simple_stake::Method::Unstake{amount: amount})
-                .encode(),
+                data: Method::Simple(simple_stake::Method::Unstake { amount: amount }).encode(),
             },
         ];
 
@@ -550,8 +550,7 @@ mod test {
                     AccountMeta::new_readonly(stake_mint_key.pubkey(), false),
                     AccountMeta::new_readonly(stake_vault_key.pubkey(), false),
                 ],
-                data: Method::Simple(simple_stake::Method::ClaimReward)
-                .encode(),
+                data: Method::Simple(simple_stake::Method::ClaimReward).encode(),
             },
         ];
 
@@ -656,8 +655,7 @@ mod test {
                     AccountMeta::new_readonly(stake_mint_key.pubkey(), false),
                     AccountMeta::new_readonly(stake_vault_key.pubkey(), false),
                 ],
-                data: Method::Simple(simple_stake::Method::AddReward{amount: amount})
-                .encode(),
+                data: Method::Simple(simple_stake::Method::AddReward { amount: amount }).encode(),
             },
         ];
 

@@ -21,6 +21,7 @@ parity-scale-codec = {version = "1.3.7", features = ["derive"]}
 solana-api-types = {path = "../solana-api-types", default-features = false}
 solar = {path = "../solar", features = ["sol-mem-intrinsics"]}
 solar-macros = {path = "../solar-macros"}
+strum = {version = "0.21", features = ["derive"]}
 
 [dev-dependencies]
 anyhow = "1"

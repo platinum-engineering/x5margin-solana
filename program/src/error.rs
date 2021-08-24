@@ -1,7 +1,7 @@
 use solana_api_types::program::ProgramError;
 use solar::spl::{SplReadError, TokenError};
 
-#[derive(Debug)]
+#[derive(IntoStaticStr, Debug, Display)]
 pub enum Error {
     InvalidData,
     InvalidAlignment,

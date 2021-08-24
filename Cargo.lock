@@ -3992,6 +3992,7 @@ dependencies = [
  "solar",
  "solar-macros",
  "static_assertions",
+ "strum",
 ]
 
 [[package]]
