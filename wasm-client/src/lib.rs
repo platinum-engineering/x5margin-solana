@@ -17,6 +17,57 @@ use solana_api_types::{
     Signature, SignatureInfo, Slot, TransactionStatus, UiAccount,
 };
 
+pub trait ResultExt<T> {
+    fn into_js_value(self) -> Result<T, JsValue>;
+}
+
+impl<T, E> ResultExt<T> for Result<T, E>
+where
+    ClientError: From<E>,
+{
+    fn into_js_value(self) -> Result<T, JsValue> {
+        self.map_err(|err| ClientError::from(err).into())
+    }
+}
+
+#[wasm_bindgen]
+pub struct Pk(Pubkey);
+
+#[wasm_bindgen]
+impl Pk {
+    pub fn new(key: String) -> Result<Pk, JsValue> {
+        Ok(Self(Pubkey::from_str(&key).into_js_value()?))
+    }
+}
+
+impl Pk {
+    fn into_inner(self) -> Pubkey {
+        self.0
+    }
+}
+
+impl AsRef<Pubkey> for Pk {
+    fn as_ref(&self) -> &Pubkey {
+        &self.0
+    }
+}
+
+#[wasm_bindgen]
+pub struct Sig(Signature);
+
+#[wasm_bindgen]
+impl Sig {
+    pub fn new(signature: String) -> Result<Sig, JsValue> {
+        Ok(Self(Signature::from_str(&signature).into_js_value()?))
+    }
+}
+
+impl Sig {
+    fn into_inner(self) -> Signature {
+        self.0
+    }
+}
+
 struct RawApiClient {
     client: reqwest::Client,
     current_id: AtomicUsize,
@@ -323,11 +374,11 @@ impl ApiClient {
         }
     }
 
-    pub fn get_account_info(&self, account: String, cfg: JsValue) -> Promise {
+    pub fn get_account_info(&self, account: Pk, cfg: JsValue) -> Promise {
         let client = self.inner.clone();
 
         let fut = async move {
-            let account = Pubkey::from_str(&account)?;
+            let account = account.into_inner();
             let cfg = cfg.into_serde()?;
             let r = client.get_account_info(account, cfg).await?;
 
@@ -337,11 +388,11 @@ impl ApiClient {
         return_promise(fut)
     }
 
-    pub fn get_program_accounts(&self, program: String, cfg: JsValue) -> Promise {
+    pub fn get_program_accounts(&self, program: Pk, cfg: JsValue) -> Promise {
         let client = self.inner.clone();
 
         let fut = async move {
-            let program = Pubkey::from_str(&program)?;
+            let program = program.into_inner();
             let cfg = cfg.into_serde()?;
             let r = client.get_program_accounts(program, cfg).await?;
 
@@ -391,11 +442,11 @@ impl ApiClient {
         return_promise(fut)
     }
 
-    pub fn get_signatures_for_address(&self, address: String, cfg: JsValue) -> Promise {
+    pub fn get_signatures_for_address(&self, address: Pk, cfg: JsValue) -> Promise {
         let client = self.inner.clone();
 
         let fut = async move {
-            let address = Pubkey::from_str(&address)?;
+            let address = address.into_inner();
             let cfg = cfg.into_serde()?;
             let r = client.get_signatures_for_address(&address, cfg).await?;
 
@@ -418,11 +469,11 @@ impl ApiClient {
         return_promise(fut)
     }
 
-    pub fn get_transaction(&self, signature: String, cfg: JsValue) -> Promise {
+    pub fn get_transaction(&self, signature: Sig, cfg: JsValue) -> Promise {
         let client = self.inner.clone();
 
         let fut = async move {
-            let signature = Signature::from_str(&signature)?;
+            let signature = signature.into_inner();
             let cfg = cfg.into_serde()?;
             let r = client.get_transaction(signature, cfg).await?;
 
@@ -432,11 +483,11 @@ impl ApiClient {
         return_promise(fut)
     }
 
-    pub fn request_airdrop(&self, pubkey: String, lamports: u64, commitment: JsValue) -> Promise {
+    pub fn request_airdrop(&self, pubkey: Pk, lamports: u64, commitment: JsValue) -> Promise {
         let client = self.inner.clone();
 
         let fut = async move {
-            let pubkey = Pubkey::from_str(&pubkey)?;
+            let pubkey = pubkey.into_inner();
             let commitment = commitment.into_serde()?;
             let r = client
                 .request_airdrop(&pubkey, lamports, commitment)
@@ -577,11 +628,11 @@ pub struct PoolClient {
 
 #[wasm_bindgen]
 impl PoolClient {
-    pub fn load_wallet_account(&self, pubkey: String, cfg: JsValue) -> Promise {
+    pub fn load_wallet_account(&self, pubkey: Pk, cfg: JsValue) -> Promise {
         let client = self.inner.clone();
 
         let fut = async move {
-            let pubkey = Pubkey::from_str(&pubkey)?;
+            let pubkey = pubkey.into_inner();
             let cfg = cfg.into_serde()?;
 
             let wallet_account = client.load_wallet_account(pubkey, cfg).await?;
@@ -591,11 +642,11 @@ impl PoolClient {
         return_promise(fut)
     }
 
-    pub fn load_mint_account(&self, pubkey: String, cfg: JsValue) -> Promise {
+    pub fn load_mint_account(&self, pubkey: Pk, cfg: JsValue) -> Promise {
         let client = self.inner.clone();
 
         let fut = async move {
-            let pubkey = Pubkey::from_str(&pubkey)?;
+            let pubkey = pubkey.into_inner();
             let cfg = cfg.into_serde()?;
 
             let wallet_account = client.load_mint_account(pubkey, cfg).await?;
@@ -605,12 +656,12 @@ impl PoolClient {
         return_promise(fut)
     }
 
-    pub fn load_stake_pool(&self, program: String, stake_pool: String) -> Promise {
+    pub fn load_stake_pool(&self, program: Pk, stake_pool: Pk) -> Promise {
         let client = self.inner.clone();
 
         let fut = async move {
-            let program = Pubkey::from_str(&program)?;
-            let stake_pool = Pubkey::from_str(&stake_pool)?;
+            let program = program.into_inner();
+            let stake_pool = stake_pool.into_inner();
             let stake_pool = client.load_stake_pool(program, stake_pool).await?;
             Ok(stake_pool)
         };
@@ -618,11 +669,11 @@ impl PoolClient {
         return_promise(fut)
     }
 
-    pub fn load_staker_ticket(&self, ticket: String, stake_pool: StakePoolEntity) -> Promise {
+    pub fn load_staker_ticket(&self, ticket: Pk, stake_pool: StakePoolEntity) -> Promise {
         let client = self.inner.clone();
 
         let fut = async move {
-            let ticket = Pubkey::from_str(&ticket)?;
+            let ticket = ticket.into_inner();
             let ticket = client.load_staker_ticket(ticket, &stake_pool).await?;
             Ok(ticket)
         };
@@ -677,6 +728,18 @@ impl Serialize for StakerTicketEntity {
     {
         self.entity.account().serialize(serializer)
     }
+}
+
+#[wasm_bindgen]
+pub struct T;
+
+#[wasm_bindgen]
+pub fn create_mint(payer: Pk, mint: Pk, authority: Pk, decimals: u8) -> Box<[JsValue]> {
+    Box::new(
+        solar::spl::create_mint(payer.as_ref(), mint.as_ref(), authority.as_ref(), decimals)
+            .map::<_, JsValue>(|i| todo!()),
+    )
+    .into()
 }
 
 #[wasm_bindgen]
