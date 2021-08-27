@@ -11,8 +11,8 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
 use solana_api_types::{
-    Account, Client, ClientError, ClientErrorKind, EncodedConfirmedTransaction, Pubkey,
-    RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse, RpcSendTransactionConfig,
+    Account, Client, ClientError, ClientErrorKind, EncodedConfirmedTransaction, Instruction,
+    Pubkey, RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse, RpcSendTransactionConfig,
     RpcSignaturesForAddressConfig, RpcSimulateTransactionConfig, RpcSimulateTransactionResult,
     Signature, SignatureInfo, Slot, TransactionStatus, UiAccount,
 };
@@ -35,8 +35,8 @@ pub struct Pk(Pubkey);
 
 #[wasm_bindgen]
 impl Pk {
-    pub fn new(key: String) -> Result<Pk, JsValue> {
-        Ok(Self(Pubkey::from_str(&key).into_js_value()?))
+    pub fn new(key: &str) -> Result<Pk, JsValue> {
+        Ok(Self(Pubkey::from_str(key).into_js_value()?))
     }
 }
 
@@ -57,8 +57,8 @@ pub struct Sig(Signature);
 
 #[wasm_bindgen]
 impl Sig {
-    pub fn new(signature: String) -> Result<Sig, JsValue> {
-        Ok(Self(Signature::from_str(&signature).into_js_value()?))
+    pub fn new(signature: &str) -> Result<Sig, JsValue> {
+        Ok(Self(Signature::from_str(signature).into_js_value()?))
     }
 }
 
@@ -731,15 +731,96 @@ impl Serialize for StakerTicketEntity {
 }
 
 #[wasm_bindgen]
-pub struct T;
+pub struct Instr(Instruction);
+
+impl From<Instruction> for Instr {
+    fn from(i: Instruction) -> Self {
+        Self(i)
+    }
+}
 
 #[wasm_bindgen]
-pub fn create_mint(payer: Pk, mint: Pk, authority: Pk, decimals: u8) -> Box<[JsValue]> {
-    Box::new(
-        solar::spl::create_mint(payer.as_ref(), mint.as_ref(), authority.as_ref(), decimals)
-            .map::<_, JsValue>(|i| todo!()),
+pub struct Instructions {
+    inner: Box<[Instr]>,
+}
+
+impl<const N: usize> From<[Instruction; N]> for Instructions {
+    fn from(src: [Instruction; N]) -> Self {
+        Self {
+            inner: Box::from(src.map(|i| Instr(i))),
+        }
+    }
+}
+
+#[wasm_bindgen]
+pub fn create_mint(payer: Pk, mint: Pk, authority: Pk, decimals: u8) -> Instructions {
+    solar::spl::create_mint(payer.as_ref(), mint.as_ref(), authority.as_ref(), decimals).into()
+}
+
+#[wasm_bindgen]
+pub fn create_wallet(payer: Pk, wallet: Pk, mint: Pk, authority: Pk) -> Instructions {
+    solar::spl::create_wallet(
+        payer.as_ref(),
+        wallet.as_ref(),
+        mint.as_ref(),
+        authority.as_ref(),
     )
     .into()
+}
+
+#[wasm_bindgen]
+pub fn mint_to(mint: Pk, wallet: Pk, authority: Pk, amount: u64) -> Instr {
+    solar::spl::mint_to(mint.as_ref(), wallet.as_ref(), authority.as_ref(), amount).into()
+}
+
+#[wasm_bindgen]
+pub fn create_account(
+    from_pubkey: Pk,
+    to_pubkey: Pk,
+    lamports: u64,
+    space: u64,
+    owner: Pk,
+) -> Instr {
+    solana_api_types::system::create_account(
+        from_pubkey.as_ref(),
+        to_pubkey.as_ref(),
+        lamports,
+        space,
+        owner.as_ref(),
+    )
+    .into()
+}
+
+#[wasm_bindgen]
+pub struct PoolProgramAuthority {
+    salt: u64,
+    pk: Pk,
+}
+
+#[wasm_bindgen]
+impl PoolProgramAuthority {
+    pub fn new(pool_key: Pk, pool_administrator_key: Pk, program_id: Pk) -> Self {
+        let mut salt: u64 = 0;
+        let pk = loop {
+            let pk = Pubkey::create_program_address(
+                &[
+                    pool_key.as_ref().as_ref(),
+                    pool_administrator_key.as_ref().as_ref(),
+                    &salt.to_le_bytes(),
+                ],
+                program_id.as_ref(),
+            );
+
+            match pk {
+                Some(s) => break s,
+                None => {
+                    salt += 1;
+                }
+            }
+        };
+
+        Self { salt, pk: Pk(pk) }
+    }
 }
 
 #[wasm_bindgen]
