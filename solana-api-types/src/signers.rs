@@ -82,26 +82,10 @@ impl Signers for [&dyn Signer; 4] {
     default_keypairs_impl!();
 }
 
-impl<T: Signer> Signers for [&T; 0] {
+impl<T: Signer, const N: usize> Signers for [T; N] {
     default_keypairs_impl!();
 }
 
-impl<T: Signer> Signers for [&T; 1] {
-    default_keypairs_impl!();
-}
-
-impl<T: Signer> Signers for [&T; 2] {
-    default_keypairs_impl!();
-}
-
-impl<T: Signer> Signers for [&T; 3] {
-    default_keypairs_impl!();
-}
-
-impl<T: Signer> Signers for [&T; 4] {
-    default_keypairs_impl!();
-}
-
-impl<T: Signer> Signers for Vec<&T> {
+impl<T: Signer> Signers for Vec<T> {
     default_keypairs_impl!();
 }

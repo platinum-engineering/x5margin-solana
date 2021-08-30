@@ -14,7 +14,8 @@ use solana_api_types::{
     Account, AccountMeta, Client, ClientError, ClientErrorKind, EncodedConfirmedTransaction,
     Instruction, Pubkey, RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse,
     RpcSendTransactionConfig, RpcSignaturesForAddressConfig, RpcSimulateTransactionConfig,
-    RpcSimulateTransactionResult, Signature, SignatureInfo, Slot, TransactionStatus, UiAccount,
+    RpcSimulateTransactionResult, Signature, SignatureInfo, Slot, Transaction, TransactionStatus,
+    UiAccount,
 };
 
 pub trait ResultExt<T> {
@@ -732,6 +733,7 @@ impl Serialize for StakerTicketEntity {
 }
 
 #[wasm_bindgen]
+#[derive(Clone)]
 pub struct Instr(Instruction);
 
 impl From<Instruction> for Instr {
@@ -742,14 +744,27 @@ impl From<Instruction> for Instr {
 
 #[wasm_bindgen]
 pub struct Instructions {
-    inner: Box<[Instr]>,
+    inner: Vec<Instruction>,
 }
 
 impl<const N: usize> From<[Instruction; N]> for Instructions {
     fn from(src: [Instruction; N]) -> Self {
         Self {
-            inner: Box::from(src.map(|i| Instr(i))),
+            inner: src.to_vec(),
         }
+    }
+}
+
+impl AsRef<[Instruction]> for Instructions {
+    fn as_ref(&self) -> &[Instruction] {
+        self.inner.as_ref()
+    }
+}
+
+#[wasm_bindgen]
+impl Instructions {
+    pub fn push(&mut self, i: Instr) {
+        self.inner.push(i.0);
     }
 }
 
@@ -834,6 +849,31 @@ pub struct PoolInstructionBuilder {
 }
 
 #[wasm_bindgen]
+pub struct CreatePoolArgs {
+    lockup_duration: i64,
+    topup_duration: i64,
+    reward_amount: u64,
+    target_amount: u64,
+}
+
+#[wasm_bindgen]
+impl CreatePoolArgs {
+    pub fn new(
+        lockup_duration: i64,
+        topup_duration: i64,
+        reward_amount: u64,
+        target_amount: u64,
+    ) -> Self {
+        Self {
+            lockup_duration,
+            topup_duration,
+            reward_amount,
+            target_amount,
+        }
+    }
+}
+
+#[wasm_bindgen]
 impl PoolInstructionBuilder {
     pub fn new(pool_key: Pk, administrator_key: Pk, stake_vault_key: Pk, program_id: Pk) -> Self {
         Self {
@@ -903,28 +943,49 @@ impl PoolInstructionBuilder {
 }
 
 #[wasm_bindgen]
-pub struct CreatePoolArgs {
-    lockup_duration: i64,
-    topup_duration: i64,
-    reward_amount: u64,
-    target_amount: u64,
+pub struct Hash(solana_api_types::Hash);
+
+impl Hash {
+    fn into_inner(self) -> solana_api_types::Hash {
+        self.0
+    }
 }
 
 #[wasm_bindgen]
-impl CreatePoolArgs {
-    pub fn new(
-        lockup_duration: i64,
-        topup_duration: i64,
-        reward_amount: u64,
-        target_amount: u64,
-    ) -> Self {
-        Self {
-            lockup_duration,
-            topup_duration,
-            reward_amount,
-            target_amount,
-        }
+pub struct Keypair(solana_api_types::Keypair);
+
+impl AsRef<solana_api_types::Keypair> for Keypair {
+    fn as_ref(&self) -> &solana_api_types::Keypair {
+        &self.0
     }
+}
+
+#[wasm_bindgen]
+pub struct Signers(Vec<Keypair>);
+
+#[wasm_bindgen]
+pub struct Tx(solana_api_types::Transaction);
+
+impl From<solana_api_types::Transaction> for Tx {
+    fn from(tx: solana_api_types::Transaction) -> Self {
+        Self(tx)
+    }
+}
+
+#[wasm_bindgen]
+pub fn transaction_signed_with_payer(
+    instructions: Instructions,
+    payer: Pk,
+    signers: &Signers,
+    recent_blockhash: Hash,
+) -> Tx {
+    Transaction::new_signed_with_payer(
+        instructions.as_ref(),
+        Some(payer.as_ref()),
+        &signers.0,
+        recent_blockhash.into_inner(),
+    )
+    .into()
 }
 
 #[wasm_bindgen]
