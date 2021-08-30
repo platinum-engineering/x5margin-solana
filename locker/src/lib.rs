@@ -6,8 +6,12 @@ use solar::{
     math::Checked,
     prelude::AccountBackend,
     time::SolTimestamp,
-    util::ResultExt,
+    util::{ResultExt, pubkey_eq, timestamp_now},
+    spl::WalletAccount,
+    qlog,
 };
+
+use crate::error::Error;
 
 #[macro_use]
 extern crate parity_scale_codec;
@@ -45,6 +49,40 @@ pub struct TokenLock<B: AccountBackend> {
     account: B,
 }
 
+#[derive(Debug)]
+pub struct CreateArgsAccounts<B: AccountBackend> {
+    pub locker: B, //(empty, uninitialized)
+    pub source_spl_token_wallet: B,
+    pub source_authority: B, //(signed)
+    pub spl_token_wallet_vault: WalletAccount<B>, //(authority = program authority)
+    pub program_authority: B,
+    pub owner_authority: B, //withdraw authority
+}
+
+impl<B: AccountBackend> CreateArgsAccounts<B> {
+    #[cfg(feature = "onchain")]
+    #[inline]
+    pub fn from_program_input<T: AccountSource<B>>(input: &mut T) -> Result<Self, Error> {
+        parse_accounts! {
+            &mut locker,
+            &source_spl_token_wallet,
+            &source_authority,
+            &spl_token_wallet_vault,
+            &program_authority,
+            &owner_authority,
+        }
+
+        Ok(Self {
+            locker,
+            source_spl_token_wallet,
+            source_authority,
+            spl_token_wallet_vault,
+            program_authority,
+            owner_authority,
+        })
+    }
+}
+
 impl<B: AccountBackend> TokenLock<B> {
     /// Create a new locker.
     ///
@@ -60,7 +98,51 @@ impl<B: AccountBackend> TokenLock<B> {
         unlock_date: SolTimestamp,
         amount: TokenAmount,
     ) -> Result<(), ProgramError> {
-        todo!()
+
+        let CreateArgsAccounts {
+            locker,
+            source_spl_token_wallet,
+            source_authority,
+            spl_token_wallet_vault,
+            program_authority,
+            owner_authority,
+        } = CreateArgsAccounts::from_program_input(input)?;
+
+        let mut entity = Self::raw_any(input.program_id(), locker)?;
+
+        entity.owner = *owner_authority.key();
+        entity.mint = source_spl_token_wallet.mint();
+        entity.vault = *spl_token_wallet_vault;
+        entity.program_authority = *program_authority.key();
+        entity.release_date = unlock_date;
+
+        let expected_program_authority = Pubkey::create_program_address(
+            &[
+                entity.account().key().as_ref(),
+                owner_authority.key().as_ref(),
+            ],
+            input.program_id(),
+        )
+        .bpf_expect("couldn't derive program authority");
+
+        if !pubkey_eq(program_authority.key(), &expected_program_authority) {
+            qlog!("provided program authority does not match expected authority");
+            return Err(Error::InvalidAuthority);
+        }
+
+        if !pubkey_eq(spl_token_wallet_vault.authority(), &expected_program_authority) {
+            qlog!("spl token wallet vault authority does not match program authority");
+            return Err(Error::InvalidAuthority);
+        }
+
+        let now = timestamp_now();
+
+        if entity.release_date <= now {
+            qlog!("can`t initialize new locker with invalid unlock date");
+            return Err(Error::InvalidData);
+        }
+
+        Ok(())
     }
 
     /// Returns 4 instructions:
@@ -163,4 +245,51 @@ pub fn main(mut input: BpfProgramInput) -> Result<(), ProgramError> {
     }
 
     Ok(())
+}
+
+#[cfg(feature = "onchain")]
+#[cfg(test)]
+mod test {
+
+    #[tokio::test]
+    async fn init_test() -> anyhow::Result<()> {
+
+        let mut program_test = ProgramTest::default();
+        let program_id = Pubkey::new_unique();
+
+        program_test.add_program(
+            "locker",
+            program_id,
+            Some(|a, b, c| {
+                builtin_process_instruction(wrapped_entrypoint::<super::Program>, a, b, c)
+            }),
+        );
+
+        let locker_key = Keypair::new();
+        let locker_owner_key = Keypair::new();
+
+        let mut salt: u64 = 0;
+        let locker_program_authority = loop {
+            let locker_program_authority = Pubkey::create_program_address(
+                &[
+                    locker_key.pubkey().as_ref(),
+                    locker_owner_key.pubkey().as_ref(),
+                ],
+                &program_id,
+            );
+
+            match locker_program_authority {
+                Some(s) => break s,
+                None => {
+                    salt += 1;
+                }
+            }
+        };
+
+        let (mut client, payer, hash) = program_test.start().await;
+
+        todo!();
+        
+        Ok(())
+    }
 }

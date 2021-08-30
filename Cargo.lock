@@ -3026,6 +3026,7 @@ name = "solar"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "az",
  "borsh",
  "byteorder",
