@@ -157,7 +157,11 @@ impl<B: AccountBackend> TokenLock<B> {
         source_mint: Pubkey,
         source_authority: Pubkey,
     ) -> [Instruction; 4] {
-        todo!()
+
+        let mut instructions = vec![];
+        todo!();
+
+        return instructions;
     }
 
     /// Relocks an existing locker with a new unlock date.
@@ -289,7 +293,7 @@ mod test {
         let (mut client, payer, hash) = program_test.start().await;
 
         todo!();
-        
+
         Ok(())
     }
 }
