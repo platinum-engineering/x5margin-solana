@@ -829,26 +829,23 @@ pub struct PoolInstructionBuilder {
     pool_key: Pk,
     administrator_key: Pk,
     program_id: Pk,
+    stake_vault_key: Pk,
     authority: PoolProgramAuthority,
 }
 
 #[wasm_bindgen]
 impl PoolInstructionBuilder {
-    pub fn new(pool_key: Pk, administrator_key: Pk, program_id: Pk) -> Self {
+    pub fn new(pool_key: Pk, administrator_key: Pk, stake_vault_key: Pk, program_id: Pk) -> Self {
         Self {
             pool_key,
             administrator_key,
             program_id,
+            stake_vault_key,
             authority: PoolProgramAuthority::new(pool_key, administrator_key, program_id),
         }
     }
 
-    pub fn create_pool(
-        &self,
-        args: CreatePoolArgs,
-        stake_mint_key: Pk,
-        stake_vault_key: Pk,
-    ) -> Instr {
+    pub fn create_pool(&self, args: CreatePoolArgs, stake_mint_key: Pk) -> Instr {
         use parity_scale_codec::Encode;
 
         Instruction {
@@ -858,7 +855,7 @@ impl PoolInstructionBuilder {
                 AccountMeta::new_readonly(self.authority.pk.into_inner(), false),
                 AccountMeta::new(self.pool_key.into_inner(), false),
                 AccountMeta::new_readonly(stake_mint_key.into_inner(), false),
-                AccountMeta::new_readonly(stake_vault_key.into_inner(), false),
+                AccountMeta::new_readonly(self.stake_vault_key.into_inner(), false),
             ],
             data: x5margin_program::Method::Simple(
                 x5margin_program::simple_stake::Method::CreatePool(
@@ -871,6 +868,34 @@ impl PoolInstructionBuilder {
                     },
                 ),
             )
+            .encode(),
+        }
+        .into()
+    }
+
+    pub fn stake(
+        &self,
+        amount: u64,
+        staker_key: Pk,
+        staker_ticket_key: Pk,
+        aux_wallet_key: Pk,
+    ) -> Instr {
+        use parity_scale_codec::Encode;
+
+        Instruction {
+            program_id: self.program_id.into_inner(),
+            accounts: vec![
+                AccountMeta::new_readonly(*solar::spl::ID, false),
+                AccountMeta::new(self.pool_key.into_inner(), false),
+                AccountMeta::new_readonly(staker_key.into_inner(), false),
+                AccountMeta::new(staker_ticket_key.into_inner(), false),
+                AccountMeta::new(self.stake_vault_key.into_inner(), false),
+                AccountMeta::new_readonly(self.administrator_key.into_inner(), true),
+                AccountMeta::new(aux_wallet_key.into_inner(), false),
+            ],
+            data: x5margin_program::Method::Simple(x5margin_program::simple_stake::Method::Stake {
+                amount: amount.into(),
+            })
             .encode(),
         }
         .into()
