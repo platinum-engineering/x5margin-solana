@@ -31,6 +31,7 @@ where
 }
 
 #[wasm_bindgen]
+#[derive(Clone, Copy)]
 pub struct Pk(Pubkey);
 
 #[wasm_bindgen]
@@ -824,6 +825,59 @@ impl PoolProgramAuthority {
 }
 
 #[wasm_bindgen]
+pub struct PoolInstructionBuilder {
+    pool_key: Pk,
+    administrator_key: Pk,
+    program_id: Pk,
+    authority: PoolProgramAuthority,
+}
+
+#[wasm_bindgen]
+impl PoolInstructionBuilder {
+    pub fn new(pool_key: Pk, administrator_key: Pk, program_id: Pk) -> Self {
+        Self {
+            pool_key,
+            administrator_key,
+            program_id,
+            authority: PoolProgramAuthority::new(pool_key, administrator_key, program_id),
+        }
+    }
+
+    pub fn create_pool(
+        &self,
+        args: CreatePoolArgs,
+        stake_mint_key: Pk,
+        stake_vault_key: Pk,
+    ) -> Instr {
+        use parity_scale_codec::Encode;
+
+        Instruction {
+            program_id: self.program_id.into_inner(),
+            accounts: vec![
+                AccountMeta::new_readonly(self.administrator_key.into_inner(), false),
+                AccountMeta::new_readonly(self.authority.pk.into_inner(), false),
+                AccountMeta::new(self.pool_key.into_inner(), false),
+                AccountMeta::new_readonly(stake_mint_key.into_inner(), false),
+                AccountMeta::new_readonly(stake_vault_key.into_inner(), false),
+            ],
+            data: x5margin_program::Method::Simple(
+                x5margin_program::simple_stake::Method::CreatePool(
+                    x5margin_program::simple_stake::InitializeArgs {
+                        program_authority_salt: self.authority.salt,
+                        lockup_duration: args.lockup_duration.into(),
+                        topup_duration: args.topup_duration.into(),
+                        reward_amount: args.reward_amount.into(),
+                        target_amount: args.target_amount.into(),
+                    },
+                ),
+            )
+            .encode(),
+        }
+        .into()
+    }
+}
+
+#[wasm_bindgen]
 pub struct CreatePoolArgs {
     lockup_duration: i64,
     topup_duration: i64,
@@ -846,41 +900,6 @@ impl CreatePoolArgs {
             target_amount,
         }
     }
-}
-
-#[wasm_bindgen]
-pub fn create_pool(
-    authority: PoolProgramAuthority,
-    args: CreatePoolArgs,
-    program_id: Pk,
-    administrator_key: Pk,
-    pool_key: Pk,
-    stake_mint_key: Pk,
-    stake_vault_key: Pk,
-) -> Instr {
-    use parity_scale_codec::Encode;
-
-    Instruction {
-        program_id: program_id.into_inner(),
-        accounts: vec![
-            AccountMeta::new_readonly(administrator_key.into_inner(), false),
-            AccountMeta::new_readonly(authority.pk.into_inner(), false),
-            AccountMeta::new(pool_key.into_inner(), false),
-            AccountMeta::new_readonly(stake_mint_key.into_inner(), false),
-            AccountMeta::new_readonly(stake_vault_key.into_inner(), false),
-        ],
-        data: x5margin_program::Method::Simple(x5margin_program::simple_stake::Method::CreatePool(
-            x5margin_program::simple_stake::InitializeArgs {
-                program_authority_salt: authority.salt,
-                lockup_duration: args.lockup_duration.into(),
-                topup_duration: args.topup_duration.into(),
-                reward_amount: args.reward_amount.into(),
-                target_amount: args.target_amount.into(),
-            },
-        ))
-        .encode(),
-    }
-    .into()
 }
 
 #[wasm_bindgen]
