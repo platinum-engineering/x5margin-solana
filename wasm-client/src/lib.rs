@@ -11,10 +11,10 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
 use solana_api_types::{
-    Account, Client, ClientError, ClientErrorKind, EncodedConfirmedTransaction, Instruction,
-    Pubkey, RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse, RpcSendTransactionConfig,
-    RpcSignaturesForAddressConfig, RpcSimulateTransactionConfig, RpcSimulateTransactionResult,
-    Signature, SignatureInfo, Slot, TransactionStatus, UiAccount,
+    Account, AccountMeta, Client, ClientError, ClientErrorKind, EncodedConfirmedTransaction,
+    Instruction, Pubkey, RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse,
+    RpcSendTransactionConfig, RpcSignaturesForAddressConfig, RpcSimulateTransactionConfig,
+    RpcSimulateTransactionResult, Signature, SignatureInfo, Slot, TransactionStatus, UiAccount,
 };
 
 pub trait ResultExt<T> {
@@ -821,6 +821,66 @@ impl PoolProgramAuthority {
 
         Self { salt, pk: Pk(pk) }
     }
+}
+
+#[wasm_bindgen]
+pub struct CreatePoolArgs {
+    lockup_duration: i64,
+    topup_duration: i64,
+    reward_amount: u64,
+    target_amount: u64,
+}
+
+#[wasm_bindgen]
+impl CreatePoolArgs {
+    pub fn new(
+        lockup_duration: i64,
+        topup_duration: i64,
+        reward_amount: u64,
+        target_amount: u64,
+    ) -> Self {
+        Self {
+            lockup_duration,
+            topup_duration,
+            reward_amount,
+            target_amount,
+        }
+    }
+}
+
+#[wasm_bindgen]
+pub fn create_pool(
+    authority: PoolProgramAuthority,
+    args: CreatePoolArgs,
+    program_id: Pk,
+    administrator_key: Pk,
+    pool_key: Pk,
+    stake_mint_key: Pk,
+    stake_vault_key: Pk,
+) -> Instr {
+    use parity_scale_codec::Encode;
+
+    Instruction {
+        program_id: program_id.into_inner(),
+        accounts: vec![
+            AccountMeta::new_readonly(administrator_key.into_inner(), false),
+            AccountMeta::new_readonly(authority.pk.into_inner(), false),
+            AccountMeta::new(pool_key.into_inner(), false),
+            AccountMeta::new_readonly(stake_mint_key.into_inner(), false),
+            AccountMeta::new_readonly(stake_vault_key.into_inner(), false),
+        ],
+        data: x5margin_program::Method::Simple(x5margin_program::simple_stake::Method::CreatePool(
+            x5margin_program::simple_stake::InitializeArgs {
+                program_authority_salt: authority.salt,
+                lockup_duration: args.lockup_duration.into(),
+                topup_duration: args.topup_duration.into(),
+                reward_amount: args.reward_amount.into(),
+                target_amount: args.target_amount.into(),
+            },
+        ))
+        .encode(),
+    }
+    .into()
 }
 
 #[wasm_bindgen]

@@ -3874,6 +3874,7 @@ dependencies = [
  "futures 0.3.16",
  "js-sys",
  "log",
+ "parity-scale-codec",
  "reqwest",
  "serde",
  "serde_derive",
