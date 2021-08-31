@@ -965,6 +965,24 @@ impl PoolInstructionBuilder {
         }
         .into()
     }
+
+    pub fn claim_reward(&self) -> Instr {
+        Instruction {
+            program_id: self.program_id.to_pubkey(),
+            accounts: vec![
+                AccountMeta::new_readonly(self.administrator_key.to_pubkey(), false),
+                AccountMeta::new_readonly(self.authority.pk.to_pubkey(), false),
+                AccountMeta::new(self.pool_key.to_pubkey(), false),
+                AccountMeta::new_readonly(self.stake_mint_key.to_pubkey(), false),
+                AccountMeta::new_readonly(self.stake_vault_key.to_pubkey(), false),
+            ],
+            data: x5margin_program::Method::Simple(
+                x5margin_program::simple_stake::Method::ClaimReward,
+            )
+            .encode(),
+        }
+        .into()
+    }
 }
 
 #[wasm_bindgen]
