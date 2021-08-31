@@ -1,3 +1,5 @@
+#![feature(min_const_generics)]
+
 use std::fmt;
 
 use async_trait::async_trait;

@@ -96,6 +96,7 @@ impl Signer for Keypair {
     }
 }
 
+#[cfg(feature = "crypto")]
 impl<T: AsRef<Keypair>> Signer for T {
     fn pubkey(&self) -> Pubkey {
         self.as_ref().pubkey()
