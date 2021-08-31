@@ -1005,7 +1005,7 @@ mod tests {
     use super::*;
 
     fn init_client() -> RawApiClient {
-        RawApiClient::devnet()
+        RawApiClient::new("http://api.devnet.solana.com")
     }
 
     #[tokio::test]
