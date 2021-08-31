@@ -6,6 +6,7 @@ use std::{
 use async_trait::async_trait;
 use futures::{Future, TryFutureExt};
 use js_sys::Promise;
+use parity_scale_codec::Encode;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
@@ -43,7 +44,7 @@ impl Pk {
 }
 
 impl Pk {
-    fn into_inner(self) -> Pubkey {
+    fn to_pubkey(self) -> Pubkey {
         self.0
     }
 }
@@ -380,7 +381,7 @@ impl ApiClient {
         let client = self.inner.clone();
 
         let fut = async move {
-            let account = account.into_inner();
+            let account = account.to_pubkey();
             let cfg = cfg.into_serde()?;
             let r = client.get_account_info(account, cfg).await?;
 
@@ -394,7 +395,7 @@ impl ApiClient {
         let client = self.inner.clone();
 
         let fut = async move {
-            let program = program.into_inner();
+            let program = program.to_pubkey();
             let cfg = cfg.into_serde()?;
             let r = client.get_program_accounts(program, cfg).await?;
 
@@ -448,7 +449,7 @@ impl ApiClient {
         let client = self.inner.clone();
 
         let fut = async move {
-            let address = address.into_inner();
+            let address = address.to_pubkey();
             let cfg = cfg.into_serde()?;
             let r = client.get_signatures_for_address(&address, cfg).await?;
 
@@ -489,7 +490,7 @@ impl ApiClient {
         let client = self.inner.clone();
 
         let fut = async move {
-            let pubkey = pubkey.into_inner();
+            let pubkey = pubkey.to_pubkey();
             let commitment = commitment.into_serde()?;
             let r = client
                 .request_airdrop(&pubkey, lamports, commitment)
@@ -634,7 +635,7 @@ impl PoolClient {
         let client = self.inner.clone();
 
         let fut = async move {
-            let pubkey = pubkey.into_inner();
+            let pubkey = pubkey.to_pubkey();
             let cfg = cfg.into_serde()?;
 
             let wallet_account = client.load_wallet_account(pubkey, cfg).await?;
@@ -648,7 +649,7 @@ impl PoolClient {
         let client = self.inner.clone();
 
         let fut = async move {
-            let pubkey = pubkey.into_inner();
+            let pubkey = pubkey.to_pubkey();
             let cfg = cfg.into_serde()?;
 
             let wallet_account = client.load_mint_account(pubkey, cfg).await?;
@@ -662,8 +663,8 @@ impl PoolClient {
         let client = self.inner.clone();
 
         let fut = async move {
-            let program = program.into_inner();
-            let stake_pool = stake_pool.into_inner();
+            let program = program.to_pubkey();
+            let stake_pool = stake_pool.to_pubkey();
             let stake_pool = client.load_stake_pool(program, stake_pool).await?;
             Ok(stake_pool)
         };
@@ -675,7 +676,7 @@ impl PoolClient {
         let client = self.inner.clone();
 
         let fut = async move {
-            let ticket = ticket.into_inner();
+            let ticket = ticket.to_pubkey();
             let ticket = client.load_staker_ticket(ticket, &stake_pool).await?;
             Ok(ticket)
         };
@@ -840,15 +841,6 @@ impl PoolProgramAuthority {
 }
 
 #[wasm_bindgen]
-pub struct PoolInstructionBuilder {
-    pool_key: Pk,
-    administrator_key: Pk,
-    program_id: Pk,
-    stake_vault_key: Pk,
-    authority: PoolProgramAuthority,
-}
-
-#[wasm_bindgen]
 pub struct CreatePoolArgs {
     lockup_duration: i64,
     topup_duration: i64,
@@ -874,28 +866,43 @@ impl CreatePoolArgs {
 }
 
 #[wasm_bindgen]
+pub struct PoolInstructionBuilder {
+    pool_key: Pk,
+    administrator_key: Pk,
+    program_id: Pk,
+    stake_mint_key: Pk,
+    stake_vault_key: Pk,
+    authority: PoolProgramAuthority,
+}
+
+#[wasm_bindgen]
 impl PoolInstructionBuilder {
-    pub fn new(pool_key: Pk, administrator_key: Pk, stake_vault_key: Pk, program_id: Pk) -> Self {
+    pub fn new(
+        pool_key: Pk,
+        administrator_key: Pk,
+        stake_mint_key: Pk,
+        stake_vault_key: Pk,
+        program_id: Pk,
+    ) -> Self {
         Self {
             pool_key,
             administrator_key,
             program_id,
+            stake_mint_key,
             stake_vault_key,
             authority: PoolProgramAuthority::new(pool_key, administrator_key, program_id),
         }
     }
 
-    pub fn create_pool(&self, args: CreatePoolArgs, stake_mint_key: Pk) -> Instr {
-        use parity_scale_codec::Encode;
-
+    pub fn create_pool(&self, args: CreatePoolArgs) -> Instr {
         Instruction {
-            program_id: self.program_id.into_inner(),
+            program_id: self.program_id.to_pubkey(),
             accounts: vec![
-                AccountMeta::new_readonly(self.administrator_key.into_inner(), false),
-                AccountMeta::new_readonly(self.authority.pk.into_inner(), false),
-                AccountMeta::new(self.pool_key.into_inner(), false),
-                AccountMeta::new_readonly(stake_mint_key.into_inner(), false),
-                AccountMeta::new_readonly(self.stake_vault_key.into_inner(), false),
+                AccountMeta::new_readonly(self.administrator_key.to_pubkey(), false),
+                AccountMeta::new_readonly(self.authority.pk.to_pubkey(), false),
+                AccountMeta::new(self.pool_key.to_pubkey(), false),
+                AccountMeta::new_readonly(self.stake_mint_key.to_pubkey(), false),
+                AccountMeta::new_readonly(self.stake_vault_key.to_pubkey(), false),
             ],
             data: x5margin_program::Method::Simple(
                 x5margin_program::simple_stake::Method::CreatePool(
@@ -920,22 +927,40 @@ impl PoolInstructionBuilder {
         staker_ticket_key: Pk,
         aux_wallet_key: Pk,
     ) -> Instr {
-        use parity_scale_codec::Encode;
-
         Instruction {
-            program_id: self.program_id.into_inner(),
+            program_id: self.program_id.to_pubkey(),
             accounts: vec![
                 AccountMeta::new_readonly(*solar::spl::ID, false),
-                AccountMeta::new(self.pool_key.into_inner(), false),
-                AccountMeta::new_readonly(staker_key.into_inner(), false),
-                AccountMeta::new(staker_ticket_key.into_inner(), false),
-                AccountMeta::new(self.stake_vault_key.into_inner(), false),
-                AccountMeta::new_readonly(self.administrator_key.into_inner(), true),
-                AccountMeta::new(aux_wallet_key.into_inner(), false),
+                AccountMeta::new(self.pool_key.to_pubkey(), false),
+                AccountMeta::new_readonly(staker_key.to_pubkey(), false),
+                AccountMeta::new(staker_ticket_key.to_pubkey(), false),
+                AccountMeta::new(self.stake_vault_key.to_pubkey(), false),
+                AccountMeta::new_readonly(self.administrator_key.to_pubkey(), true),
+                AccountMeta::new(aux_wallet_key.to_pubkey(), false),
             ],
             data: x5margin_program::Method::Simple(x5margin_program::simple_stake::Method::Stake {
                 amount: amount.into(),
             })
+            .encode(),
+        }
+        .into()
+    }
+
+    pub fn unstake(&self, amount: u64) -> Instr {
+        Instruction {
+            program_id: self.program_id.to_pubkey(),
+            accounts: vec![
+                AccountMeta::new_readonly(self.administrator_key.to_pubkey(), false),
+                AccountMeta::new_readonly(self.authority.pk.to_pubkey(), false),
+                AccountMeta::new(self.pool_key.to_pubkey(), false),
+                AccountMeta::new_readonly(self.stake_mint_key.to_pubkey(), false),
+                AccountMeta::new_readonly(self.stake_vault_key.to_pubkey(), false),
+            ],
+            data: x5margin_program::Method::Simple(
+                x5margin_program::simple_stake::Method::Unstake {
+                    amount: amount.into(),
+                },
+            )
             .encode(),
         }
         .into()
