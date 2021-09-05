@@ -35,7 +35,9 @@ pub enum Method {
         unlock_date: SolTimestamp,
         amount: TokenAmount,
     },
-    ReLock,
+    ReLock {
+        unlock_date: SolTimestamp,
+    },
     Withdraw,
     Increment,
     Split,
@@ -441,7 +443,9 @@ pub fn main(mut input: BpfProgramInput) -> Result<(), ProgramError> {
             unlock_date,
             amount,
         } => TokenLock::create(input, unlock_date, amount).bpf_unwrap(),
-        Method::ReLock => todo!(),
+        Method::ReLock {
+            unlock_date,
+        } => TokenLock::relock(input, unlock_date).bpf_unwra(),
         Method::Withdraw => todo!(),
         Method::Increment => todo!(),
         Method::Split => todo!(),
