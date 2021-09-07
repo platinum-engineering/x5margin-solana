@@ -31,6 +31,7 @@ mod onchain {
     use solana_api_types::{entrypoint::MAX_PERMITTED_DATA_INCREASE, program::ProgramResult};
 
     use crate::account::onchain::{Account, AccountRef};
+    use super::*;
 
     #[cfg(feature = "onchain")]
     pub struct BpfProgramInput {
