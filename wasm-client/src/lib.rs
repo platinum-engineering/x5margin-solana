@@ -809,20 +809,20 @@ pub fn create_account(
 }
 
 #[wasm_bindgen]
-pub struct PoolProgramAuthority {
+pub struct ProgramAuthority {
     salt: u64,
     pk: Pk,
 }
 
 #[wasm_bindgen]
-impl PoolProgramAuthority {
-    pub fn new(pool_key: Pk, pool_administrator_key: Pk, program_id: Pk) -> Self {
+impl ProgramAuthority {
+    pub fn new(key: Pk, administrator_key: Pk, program_id: Pk) -> Self {
         let mut salt: u64 = 0;
         let pk = loop {
             let pk = Pubkey::create_program_address(
                 &[
-                    pool_key.as_ref().as_ref(),
-                    pool_administrator_key.as_ref().as_ref(),
+                    key.as_ref().as_ref(),
+                    administrator_key.as_ref().as_ref(),
                     &salt.to_le_bytes(),
                 ],
                 program_id.as_ref(),
@@ -872,7 +872,7 @@ pub struct PoolInstructionBuilder {
     program_id: Pk,
     stake_mint_key: Pk,
     stake_vault_key: Pk,
-    authority: PoolProgramAuthority,
+    authority: ProgramAuthority,
 }
 
 #[wasm_bindgen]
@@ -890,7 +890,7 @@ impl PoolInstructionBuilder {
             program_id,
             stake_mint_key,
             stake_vault_key,
-            authority: PoolProgramAuthority::new(pool_key, administrator_key, program_id),
+            authority: ProgramAuthority::new(pool_key, administrator_key, program_id),
         }
     }
 
@@ -1000,6 +1000,40 @@ impl PoolInstructionBuilder {
                 },
             )
             .encode(),
+        }
+        .into()
+    }
+}
+
+#[wasm_bindgen]
+pub struct LockerInstructionBuilder {
+    program_id: Pk,
+    locker: Pk,
+    administrator_key: Pk,
+    authority: ProgramAuthority,
+}
+
+#[wasm_bindgen]
+impl LockerInstructionBuilder {
+    pub fn new(program_id: Pk, locker: Pk, administrator_key: Pk) -> Self {
+        Self {
+            program_id,
+            locker,
+            administrator_key,
+            authority: ProgramAuthority::new(locker, administrator_key, program_id),
+        }
+    }
+
+    pub fn create_token_lock(&self, unlock_date: i64, amount: u64) -> Instr {
+        Instruction {
+            program_id: self.program_id.to_pubkey(),
+            accounts: vec![
+                AccountMeta::new_readonly(self.administrator_key.to_pubkey(), false),
+                AccountMeta::new_readonly(self.locker.to_pubkey(), false),
+                AccountMeta::new(self.locker.to_pubkey(), false),
+                todo!(),
+            ],
+            data: todo!(),
         }
         .into()
     }
