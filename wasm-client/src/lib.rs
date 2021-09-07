@@ -502,13 +502,12 @@ impl ApiClient {
         return_promise(fut)
     }
 
-    pub fn send_transaction(&self, transaction: JsValue, cfg: JsValue) -> Promise {
+    pub fn send_transaction(&self, transaction: Tx, cfg: JsValue) -> Promise {
         let client = self.inner.clone();
 
         let fut = async move {
-            let transaction = transaction.into_serde()?;
             let cfg = cfg.into_serde()?;
-            let r = client.send_transaction(&transaction, cfg).await?;
+            let r = client.send_transaction(transaction.as_ref(), cfg).await?;
 
             Ok(r)
         };
@@ -516,13 +515,14 @@ impl ApiClient {
         return_promise(fut)
     }
 
-    pub fn simulate_transaction(&self, transaction: JsValue, cfg: JsValue) -> Promise {
+    pub fn simulate_transaction(&self, transaction: Tx, cfg: JsValue) -> Promise {
         let client = self.inner.clone();
 
         let fut = async move {
-            let transaction = transaction.into_serde()?;
             let cfg = cfg.into_serde()?;
-            let r = client.simulate_transaction(&transaction, cfg).await?;
+            let r = client
+                .simulate_transaction(transaction.as_ref(), cfg)
+                .await?;
 
             Ok(r)
         };
@@ -1066,6 +1066,12 @@ pub struct Tx(solana_api_types::Transaction);
 impl From<solana_api_types::Transaction> for Tx {
     fn from(tx: solana_api_types::Transaction) -> Self {
         Self(tx)
+    }
+}
+
+impl AsRef<solana_api_types::Transaction> for Tx {
+    fn as_ref(&self) -> &solana_api_types::Transaction {
+        &self.0
     }
 }
 
