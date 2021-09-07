@@ -1,8 +1,10 @@
 use fixed::types::U64F64;
 use parity_scale_codec::Decode;
 use solana_api_types::{program::ProgramError, Instruction, Pubkey};
+#[cfg(feature = "onchain")]
+use solar::input::BpfProgramInput;
 use solar::{
-    input::{AccountSource, BpfProgramInput, ProgramInput},
+    input::{AccountSource, ProgramInput},
     math::Checked,
     prelude::AccountBackend,
     time::SolTimestamp,
@@ -144,6 +146,7 @@ impl<B: AccountBackend> TokenLock<B> {
     }
 }
 
+#[cfg(feature = "onchain")]
 pub fn main(mut input: BpfProgramInput) -> Result<(), ProgramError> {
     let mut data = input.data();
     let method = Method::decode(&mut data)

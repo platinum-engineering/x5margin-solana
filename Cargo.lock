@@ -3114,20 +3114,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
-name = "spl-token"
-version = "3.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbfa8fd791aeb4d7ad5fedb7872478de9f4e8b4fcb02dfd9e7f2f9ae3f3ddd73"
-dependencies = [
- "arrayref",
- "num-derive",
- "num-traits",
- "num_enum",
- "solana-program",
- "thiserror",
-]
-
-[[package]]
 name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3327,21 +3313,15 @@ checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 name = "token-locker"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "az",
  "fixed",
  "num-traits",
  "num_enum",
  "parity-scale-codec",
  "solana-api-types",
- "solana-program",
- "solana-program-test",
- "solana-sdk",
  "solar",
  "solar-macros",
- "spl-token",
  "static_assertions",
- "tokio 1.10.0",
 ]
 
 [[package]]
@@ -3882,6 +3862,7 @@ dependencies = [
  "solana-api-types",
  "solar",
  "thiserror",
+ "token-locker",
  "tokio 1.10.0",
  "wasm-bindgen",
  "wasm-bindgen-futures",

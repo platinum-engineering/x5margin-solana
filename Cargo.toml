@@ -9,13 +9,13 @@ members = [
   "jsonrpc-client",
   "solar",
   "solar-macros",
-  "locker",
 ]
 # Excluded b/c it's easier to control what dependencies these crates
 # have and what dependencies they don't have.
 exclude = [
   "program",
   "program-so",
+  "locker"
 ]
 
 [profile.bpf-release]

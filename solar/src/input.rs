@@ -1,15 +1,8 @@
-use std::{
-    alloc::Layout,
-    mem::{align_of, size_of, MaybeUninit},
-    slice::from_raw_parts,
-};
+use solana_api_types::Pubkey;
 
-use solana_api_types::{entrypoint::MAX_PERMITTED_DATA_INCREASE, program::ProgramResult, Pubkey};
-
-use crate::{
-    account::onchain::{Account, AccountRef},
-    prelude::AccountBackend,
-};
+use crate::prelude::AccountBackend;
+#[cfg(feature = "onchain")]
+pub use onchain::*;
 
 pub const MAX_ACCOUNTS: usize = 32;
 
@@ -27,194 +20,210 @@ pub trait AccountSource<B: AccountBackend>: ProgramInput {
     fn next_account(&mut self) -> B;
 }
 
-pub struct BpfProgramInput {
-    pub(crate) program_id: &'static Pubkey,
-    pub(crate) accounts: ProgramAccounts,
-    pub(crate) data: &'static [u8],
-}
+#[cfg(feature = "onchain")]
+mod onchain {
+    use std::{
+        alloc::Layout,
+        mem::{align_of, size_of, MaybeUninit},
+        slice::from_raw_parts,
+    };
 
-pub struct ProgramAccounts {
-    pub(crate) accounts: &'static mut [MaybeUninit<Account>; MAX_ACCOUNTS],
-    pub(crate) len: usize,
-    pub(crate) cursor: usize,
-}
+    use solana_api_types::{entrypoint::MAX_PERMITTED_DATA_INCREASE, program::ProgramResult};
 
-#[repr(C)]
-struct SerializedAccount {
-    dup_info: u8,
-    is_signer: u8,
-    is_writable: u8,
-    executable: u8,
-    padding: [u8; 4],
-    key: Pubkey,
-    owner: Pubkey,
-    lamports: u64,
-    data_len: u64,
-}
+    use crate::account::onchain::{Account, AccountRef};
 
-impl BpfProgramInput {
-    /// Deserialize inputs to a BPF program invocation.
-    ///
-    /// This implementation is hand-optimized to produce minimal bytecode.
-    /// # Safety
-    /// Must be called with a pointer to a BPF entrypoint memory region, or one that mimicks it.
-    pub unsafe fn deserialize_from_bpf_entrypoint(mut input: *mut u8) -> Self {
-        const U64_SIZE: usize = size_of::<u64>();
+    #[cfg(feature = "onchain")]
+    pub struct BpfProgramInput {
+        pub(crate) program_id: &'static Pubkey,
+        pub(crate) accounts: ProgramAccounts,
+        pub(crate) data: &'static [u8],
+    }
 
-        let num_accounts = *(input as *const u64) as usize;
+    #[cfg(feature = "onchain")]
+    pub struct ProgramAccounts {
+        pub(crate) accounts: &'static mut [MaybeUninit<Account>; MAX_ACCOUNTS],
+        pub(crate) len: usize,
+        pub(crate) cursor: usize,
+    }
 
-        if num_accounts > 32 {
-            panic!("max 32 accounts supported in input");
-        }
+    #[repr(C)]
+    struct SerializedAccount {
+        dup_info: u8,
+        is_signer: u8,
+        is_writable: u8,
+        executable: u8,
+        padding: [u8; 4],
+        key: Pubkey,
+        owner: Pubkey,
+        lamports: u64,
+        data_len: u64,
+    }
 
-        input = input.add(U64_SIZE);
+    impl BpfProgramInput {
+        /// Deserialize inputs to a BPF program invocation.
+        ///
+        /// This implementation is hand-optimized to produce minimal bytecode.
+        /// # Safety
+        /// Must be called with a pointer to a BPF entrypoint memory region, or one that mimicks it.
+        pub unsafe fn deserialize_from_bpf_entrypoint(mut input: *mut u8) -> Self {
+            const U64_SIZE: usize = size_of::<u64>();
 
-        let memory = std::alloc::alloc(Layout::new::<[MaybeUninit<Account>; 32]>());
-        let accounts = &mut *memory.cast::<[MaybeUninit<Account>; 32]>();
+            let num_accounts = *(input as *const u64) as usize;
 
-        (0..num_accounts).for_each(|i| {
-            let dup_info = *(input as *const u8);
-            if dup_info == std::u8::MAX {
-                let serialized = &mut *(input as *mut SerializedAccount);
-                let data_len = serialized.data_len as usize;
-                let data = input.add(size_of::<SerializedAccount>());
-
-                let data_end = data.add(data_len + MAX_PERMITTED_DATA_INCREASE);
-                let slack = align_of::<u128>() - data_end as usize % align_of::<u128>();
-                let data_end = data_end.add(slack);
-
-                let rent_epoch = *(data_end as *const u64);
-
-                accounts.get_unchecked_mut(i).as_mut_ptr().write(Account {
-                    key: &serialized.key,
-                    is_signer: serialized.is_signer == 1,
-                    is_writable: serialized.is_writable == 1,
-                    lamports: &mut serialized.lamports,
-                    data_len,
-                    data,
-                    owner: &serialized.owner,
-                    is_executable: serialized.executable == 1,
-                    rent_epoch,
-                });
-
-                input = data_end.add(U64_SIZE);
-            } else {
-                panic!("duplicate account inputs are unsupported");
+            if num_accounts > 32 {
+                panic!("max 32 accounts supported in input");
             }
-        });
 
-        let data_len = *(input as *const u64) as usize;
-        input = input.add(U64_SIZE);
+            input = input.add(U64_SIZE);
 
-        let data = from_raw_parts(input, data_len);
-        let program_id: &Pubkey = &*(input.add(data_len) as *const Pubkey);
+            let memory = std::alloc::alloc(Layout::new::<[MaybeUninit<Account>; 32]>());
+            let accounts = &mut *memory.cast::<[MaybeUninit<Account>; 32]>();
 
-        let accounts = ProgramAccounts {
-            accounts,
-            len: num_accounts,
-            cursor: 0,
-        };
+            (0..num_accounts).for_each(|i| {
+                let dup_info = *(input as *const u8);
+                if dup_info == std::u8::MAX {
+                    let serialized = &mut *(input as *mut SerializedAccount);
+                    let data_len = serialized.data_len as usize;
+                    let data = input.add(size_of::<SerializedAccount>());
 
-        BpfProgramInput {
-            program_id,
-            accounts,
-            data,
-        }
-    }
-}
+                    let data_end = data.add(data_len + MAX_PERMITTED_DATA_INCREASE);
+                    let slack = align_of::<u128>() - data_end as usize % align_of::<u128>();
+                    let data_end = data_end.add(slack);
 
-impl ProgramInput for BpfProgramInput {
-    fn program_id(&self) -> &Pubkey {
-        self.program_id
-    }
+                    let rent_epoch = *(data_end as *const u64);
 
-    fn data(&self) -> &[u8] {
-        self.data
-    }
+                    accounts.get_unchecked_mut(i).as_mut_ptr().write(Account {
+                        key: &serialized.key,
+                        is_signer: serialized.is_signer == 1,
+                        is_writable: serialized.is_writable == 1,
+                        lamports: &mut serialized.lamports,
+                        data_len,
+                        data,
+                        owner: &serialized.owner,
+                        is_executable: serialized.executable == 1,
+                        rent_epoch,
+                    });
 
-    fn remaining(&self) -> usize {
-        self.accounts.remaining()
-    }
+                    input = data_end.add(U64_SIZE);
+                } else {
+                    panic!("duplicate account inputs are unsupported");
+                }
+            });
 
-    fn len(&self) -> usize {
-        self.accounts.len()
-    }
+            let data_len = *(input as *const u64) as usize;
+            input = input.add(U64_SIZE);
 
-    fn is_empty(&self) -> bool {
-        self.accounts.is_empty()
-    }
-}
+            let data = from_raw_parts(input, data_len);
+            let program_id: &Pubkey = &*(input.add(data_len) as *const Pubkey);
 
-impl AccountSource<AccountRef> for BpfProgramInput {
-    fn take_accounts<const N: usize>(&mut self) -> [AccountRef; N] {
-        self.accounts.take_accounts()
-    }
+            let accounts = ProgramAccounts {
+                accounts,
+                len: num_accounts,
+                cursor: 0,
+            };
 
-    fn next_account(&mut self) -> AccountRef {
-        self.accounts.next_account()
-    }
-}
-
-impl ProgramAccounts {
-    #[inline]
-    pub fn take_accounts<const N: usize>(&mut self) -> [AccountRef; N] {
-        assert!(N > 0);
-
-        if self.cursor + N > self.len {
-            panic!("tried to take more accounts than available");
-        }
-
-        // NB(mori): we can't intialize the array with meaningful values,
-        // so we have to use MaybeUninit as a workaround until we actually write the refs
-        const UNINIT: MaybeUninit<AccountRef> = MaybeUninit::uninit();
-        let mut array: [MaybeUninit<AccountRef>; N] = [UNINIT; N];
-        (0..N).for_each(|i| {
-            unsafe {
-                // NB(mori): this function can only ever yield one reference to each account,
-                // so mutable aliasing will not occur.
-                //
-                // previous deserialization will ensure that the Account is actually initialized,
-                // so we can call `assume_init_mut` here.
-                let account_ref =
-                    (*self.accounts.as_mut_ptr().add(self.cursor + i)).assume_init_mut();
-                array.get_unchecked_mut(i).as_mut_ptr().write(account_ref);
+            BpfProgramInput {
+                program_id,
+                accounts,
+                data,
             }
-        });
-
-        self.cursor += N;
-
-        // NB(mori): this is safe because all MaybeUninits have been populated with initialized values.
-        // transmute via evil ptr casting
-        unsafe { array.as_ptr().cast::<[AccountRef; N]>().read() }
+        }
     }
 
-    #[inline]
-    pub fn next_account(&mut self) -> AccountRef {
-        if self.cursor >= self.len {
-            panic!("tried to take more accounts than available");
+    impl ProgramInput for BpfProgramInput {
+        fn program_id(&self) -> &Pubkey {
+            self.program_id
         }
 
-        let account = unsafe { (*self.accounts.as_mut_ptr().add(self.cursor)).assume_init_mut() };
+        fn data(&self) -> &[u8] {
+            self.data
+        }
 
-        self.cursor += 1;
-        account
+        fn remaining(&self) -> usize {
+            self.accounts.remaining()
+        }
+
+        fn len(&self) -> usize {
+            self.accounts.len()
+        }
+
+        fn is_empty(&self) -> bool {
+            self.accounts.is_empty()
+        }
     }
 
-    pub fn remaining(&self) -> usize {
-        self.len - self.cursor
+    impl AccountSource<AccountRef> for BpfProgramInput {
+        fn take_accounts<const N: usize>(&mut self) -> [AccountRef; N] {
+            self.accounts.take_accounts()
+        }
+
+        fn next_account(&mut self) -> AccountRef {
+            self.accounts.next_account()
+        }
     }
 
-    pub fn len(&self) -> usize {
-        self.len
+    impl ProgramAccounts {
+        #[inline]
+        pub fn take_accounts<const N: usize>(&mut self) -> [AccountRef; N] {
+            assert!(N > 0);
+
+            if self.cursor + N > self.len {
+                panic!("tried to take more accounts than available");
+            }
+
+            // NB(mori): we can't intialize the array with meaningful values,
+            // so we have to use MaybeUninit as a workaround until we actually write the refs
+            const UNINIT: MaybeUninit<AccountRef> = MaybeUninit::uninit();
+            let mut array: [MaybeUninit<AccountRef>; N] = [UNINIT; N];
+            (0..N).for_each(|i| {
+                unsafe {
+                    // NB(mori): this function can only ever yield one reference to each account,
+                    // so mutable aliasing will not occur.
+                    //
+                    // previous deserialization will ensure that the Account is actually initialized,
+                    // so we can call `assume_init_mut` here.
+                    let account_ref =
+                        (*self.accounts.as_mut_ptr().add(self.cursor + i)).assume_init_mut();
+                    array.get_unchecked_mut(i).as_mut_ptr().write(account_ref);
+                }
+            });
+
+            self.cursor += N;
+
+            // NB(mori): this is safe because all MaybeUninits have been populated with initialized values.
+            // transmute via evil ptr casting
+            unsafe { array.as_ptr().cast::<[AccountRef; N]>().read() }
+        }
+
+        #[inline]
+        pub fn next_account(&mut self) -> AccountRef {
+            if self.cursor >= self.len {
+                panic!("tried to take more accounts than available");
+            }
+
+            let account =
+                unsafe { (*self.accounts.as_mut_ptr().add(self.cursor)).assume_init_mut() };
+
+            self.cursor += 1;
+            account
+        }
+
+        pub fn remaining(&self) -> usize {
+            self.len - self.cursor
+        }
+
+        pub fn len(&self) -> usize {
+            self.len
+        }
+
+        pub fn is_empty(&self) -> bool {
+            self.len == self.cursor
+        }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.len == self.cursor
+    pub trait Entrypoint {
+        fn call(input: BpfProgramInput) -> ProgramResult;
     }
-}
-
-pub trait Entrypoint {
-    fn call(input: BpfProgramInput) -> ProgramResult;
 }
 
 #[cfg(feature = "runtime-test")]
