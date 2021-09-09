@@ -254,7 +254,7 @@ impl<B: AccountBackend> TokenLock<B> {
             owner_authority,
         } = CreateArgsAccounts::from_program_input(input)?;
 
-        let mut entity = Self::raw_any(input.program_id(), locker)?;
+        let mut locker = Self::raw_any(input.program_id(), locker)?;
 
         entity.owner = *owner_authority.key();
         entity.mint = source_spl_token_wallet.mint();
