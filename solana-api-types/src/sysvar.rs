@@ -39,7 +39,7 @@ pub trait Sysvar:
 macro_rules! impl_sysvar_get {
     ($sysvar_struct:ident, $sysvar_mod:ident, $syscall_name:ident) => {
         #[cfg(target_arch = "bpf")]
-        fn get() -> Result<Self, ProgramError> {
+        fn get() -> Result<Self, $crate::program::ProgramError> {
             let mut var = Self::default();
             let var_addr = &mut var as *mut _ as *mut u8;
 

@@ -1,0 +1,44 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build-test-wasm32:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly-2021-08-04
+          target: wasm32-unknown-unknown
+          profile: minimal
+          override: true
+      - uses: Swatinem/rust-cache@v1
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: -p wasm-client --target wasm32-unknown-unknown
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: -p wasm-client
+
+  build-test-bpf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly-2021-08-04
+          profile: minimal
+          override: true
+      - uses: Swatinem/rust-cache@v1
+        with:
+          working-directory: ./program-so
+      - run: |
+          sh -c "$(curl -sSfL https://release.solana.com/v1.7.2/install)"
+          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+          solana --version
+          cargo build-bpf
+          # cargo +bpf build -Z unstable-options --target bpfel-unknown-unknown --profile bpf-release
+        working-directory: ./program-so

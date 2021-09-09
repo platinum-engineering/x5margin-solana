@@ -2,22 +2,26 @@ cargo-features = ["named-profiles"]
 
 [workspace]
 members = [
-    "program",
-    "program-so",
-    "cli",
-    "disassembler",
-    "wasm-client",
-    "solana-api-types",
-    "jsonrpc-client",
-    "solar", 
-    "solar-macros", 
-    "locker",
+  "cli",
+  "disassembler",
+  "wasm-client",
+  "solana-api-types",
+  "jsonrpc-client",
+  "solar",
+  "solar-macros",
+]
+# Excluded b/c it's easier to control what dependencies these crates
+# have and what dependencies they don't have.
+exclude = [
+  "program",
+  "program-so",
+  "locker"
 ]
 
 [profile.bpf-release]
+codegen-units = 1
 inherits = "release"
 lto = true
-codegen-units = 1
 opt-level = 3
 overflow-checks = false
 # debug = true

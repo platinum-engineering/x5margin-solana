@@ -1,15 +1,15 @@
 [package]
+edition = "2018"
 name = "x5margin-program-so"
 version = "0.1.0"
-edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-x5margin-program = { path = "../program" }
-solar = { path = "../solar" }
+solar = {path = "../solar", features = ["onchain"]}
+x5margin-program = {path = "../program", features = ["onchain"]}
 
-solana-program = "1.7.2"
+solana-program = "= 1.7.2"
 
 [lib]
 crate-type = ["cdylib"]
