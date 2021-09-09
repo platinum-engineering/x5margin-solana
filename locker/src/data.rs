@@ -230,10 +230,3 @@ impl EntityAllocator {
         EntityId { id }
     }
 }
-
-pub enum RelationshipKind {
-    None,
-    Parent,
-    Child,
-    Sibling,
-}
