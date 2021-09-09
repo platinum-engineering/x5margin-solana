@@ -40,10 +40,18 @@ pub enum Method {
     ReLock {
         unlock_date: SolTimestamp,
     },
-    Withdraw,
-    Increment,
-    Split,
-    ChangeOwner,
+    Withdraw {
+        amount: TokenAmount,
+    },
+    Increment {
+        amount: TokenAmount,
+    },
+    Split {
+        amount: TokenAmount,
+    },
+    ChangeOwner {
+        amount: TokenAmount,
+    },
 }
 
 #[repr(C)]
@@ -229,7 +237,43 @@ impl<B: AccountBackend> ChangeOwnerArgsAccounts<B> {
     }
 }
 
+pub const HEADER_RESERVED: usize = 96;
+
 impl<B: AccountBackend> TokenLock<B> {
+
+    pub fn raw_any(program_id: &Pubkey, account: B) -> Result<Self, Error> {
+        let size = account.data().len();
+
+        if size < HEADER_RESERVED || !T::is_valid_size(size - HEADER_RESERVED) {
+            return Err(Error::InvalidData);
+        }
+
+        // require that account data is aligned on a 16-byte boundary
+        // this is mostly important for offchain purposes
+        if (account.data().as_ptr()) as usize % 16 != 0 {
+            return Err(Error::InvalidAlignment);
+        }
+
+        let locker = Self {
+            account,
+        };
+
+        if locker.account.owner() != program_id {
+            return Err(Error::InvalidOwner);
+        }
+
+        // require all entities to be rent-exempt to be valid
+        if B::Env::supports_syscalls() && !locker.is_rent_exempt(&Rent::get().bpf_unwrap()) {
+            return Err(Error::NotRentExempt);
+        };
+
+        Ok(locker)
+    }
+
+    pub fn account(&self) -> &B {
+        &self.account
+    }
+
     /// Create a new locker.
     ///
     /// Account inputs:
@@ -254,7 +298,9 @@ impl<B: AccountBackend> TokenLock<B> {
             owner_authority,
         } = CreateArgsAccounts::from_program_input(input)?;
 
-        let mut locker = Self::raw_any(input.program_id(), locker)?;
+        let mut new_locker = new TokenLock {
+            account: locker,
+        };
 
         entity.owner = *owner_authority.key();
         entity.mint = source_spl_token_wallet.mint();
@@ -449,10 +495,18 @@ pub fn main(mut input: BpfProgramInput) -> Result<(), ProgramError> {
         Method::ReLock {
             unlock_date,
         } => TokenLock::relock(input, unlock_date).bpf_unwra(),
-        Method::Withdraw => todo!(),
-        Method::Increment => todo!(),
-        Method::Split => todo!(),
-        Method::ChangeOwner => todo!(),
+        Method::Withdraw {
+            amount,
+        } => withdraw(input, amount).bpf_unwra(),
+        Method::Increment {
+            amount,
+        } => increment(input, amount).bpf_unwra(),
+        Method::Split {
+            amount,
+        } => split(input, amount).bpf_unwra(),
+        Method::ChangeOwner {
+            amount,
+        } => change_owner(input, amount).bpf_unwra(),
     }
 
     Ok(())
