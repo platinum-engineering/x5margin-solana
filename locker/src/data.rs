@@ -9,7 +9,7 @@ use solar::{
 
 use crate::error::Error;
 
-pub const HEADER_RESERVED: usize = 96;
+pub const HEADER_RESERVED: usize = 16;
 
 #[macro_export]
 macro_rules! impl_entity_simple_deref {
@@ -80,10 +80,7 @@ pub enum EntityKind {
 
 #[repr(C)]
 pub struct EntityHeader {
-    pub root: Pubkey,
-
     pub id: EntityId,
-    pub parent_id: EntityId,
     pub kind: EntityKind,
 }
 
@@ -189,22 +186,6 @@ where
 
     pub fn id(&self) -> EntityId {
         self.header().id
-    }
-
-    pub fn root(&self) -> &Pubkey {
-        &self.header().root
-    }
-
-    pub fn parent_id(&self) -> EntityId {
-        self.header().parent_id
-    }
-
-    pub fn is_parent<U: AccountType>(&self, other: &Entity<B, U>) -> bool {
-        self.root() == other.root() && self.id() == other.parent_id()
-    }
-
-    pub fn is_child<U: AccountType>(&self, other: &Entity<B, U>) -> bool {
-        self.root() == other.root() && self.parent_id() == other.id()
     }
 
     #[inline(never)]
