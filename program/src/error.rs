@@ -17,6 +17,25 @@ pub enum Error {
     TokenError(TokenError),
 }
 
+impl Error {
+    fn code(&self) -> u32 {
+        match self {
+            Error::InvalidData => 1,
+            Error::InvalidAlignment => 2,
+            Error::InvalidOwner => 3,
+            Error::InvalidParent => 4,
+            Error::InvalidKind => 5,
+            Error::InvalidAuthority => 6,
+            Error::InvalidMint => 7,
+            Error::InvalidAccount => 8,
+            Error::NotRentExempt => 9,
+            Error::Validation => 10,
+            Error::SplReadError(_) => 11,
+            Error::TokenError(_) => 12,
+        }
+    }
+}
+
 impl From<SplReadError> for Error {
     fn from(other: SplReadError) -> Self {
         Self::SplReadError(other)
@@ -30,7 +49,7 @@ impl From<TokenError> for Error {
 }
 
 impl From<Error> for ProgramError {
-    fn from(_: Error) -> Self {
-        todo!()
+    fn from(e: Error) -> Self {
+        Self::Custom(e.code())
     }
 }
