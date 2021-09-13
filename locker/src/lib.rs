@@ -7,8 +7,8 @@ use solana_api_types::{program::ProgramError, Instruction, Pubkey};
 #[cfg(feature = "onchain")]
 use solar::input::BpfProgramInput;
 use solar::{
-    account::AccountFields,
-    input::{AccountSource, ProgramInput},
+    account::{AccountFields, AccountFieldsMut},
+    input::AccountSource,
     math::Checked,
     prelude::AccountBackend,
     qlog,
@@ -102,7 +102,7 @@ impl<B: AccountBackend> CreateArgsAccounts<B> {
             locker,
             source_spl_token_wallet,
             source_authority,
-            spl_token_wallet_vault,
+            spl_token_wallet_vault: WalletAccount::any(spl_token_wallet_vault)?,
             program_authority,
             owner_authority,
         })
@@ -152,7 +152,7 @@ impl<B: AccountBackend> WithdrawArgsAccounts<B> {
 
         Ok(Self {
             locker,
-            spl_token_wallet_vault,
+            spl_token_wallet_vault: WalletAccount::any(spl_token_wallet_vault)?,
             destination_spl_token_wallet,
             program_authority,
             owner_authority,
@@ -180,7 +180,7 @@ impl<B: AccountBackend> IncrementArgsAccounts<B> {
 
         Ok(Self {
             locker,
-            spl_token_wallet_vault,
+            spl_token_wallet_vault: WalletAccount::any(spl_token_wallet_vault)?,
             source_spl_token_wallet,
             source_authority,
         })
@@ -208,7 +208,7 @@ impl<B: AccountBackend> SplitArgsAccounts<B> {
         Ok(Self {
             source_locker,
             new_locker,
-            source_spl_token_wallet_vault,
+            source_spl_token_wallet_vault: WalletAccount::any(source_spl_token_wallet_vault)?,
             new_spl_token_wallet_vault: WalletAccount::any(new_spl_token_wallet_vault)?,
         })
     }
@@ -251,11 +251,15 @@ where
     /// SPL Token Wallet vault (authority = program authority)
     /// Program Authority
     /// Owner (withdraw authority)
-    pub fn create<S: AccountSource<B>>(
-        input: S,
+    pub fn create<S>(
+        mut input: S,
         unlock_date: SolTimestamp,
         amount: TokenAmount,
-    ) -> Result<(), ProgramError> {
+    ) -> Result<(), ProgramError>
+    where
+        S: AccountSource<B>,
+        B::Impl: AccountFieldsMut,
+    {
         let CreateArgsAccounts {
             locker,
             source_spl_token_wallet,
@@ -267,18 +271,18 @@ where
 
         let mut entity = Self::raw_any(input.program_id(), locker)?;
 
-        entity.owner = *owner_authority.key();
+        // entity.owner = *owner_authority.key();
         // entity.mint = source_spl_token_wallet.mint();
-        entity.vault = *spl_token_wallet_vault;
-        entity.program_authority = *program_authority.key();
-        entity.release_date = unlock_date;
+        // entity.vault = *spl_token_wallet_vault;
+        // entity.program_authority = *program_authority.key();
+        // entity.release_date = unlock_date;
 
-        let id = entity.allocator.allocate_id();
+        // let id = entity.allocator.allocate_id();
         let entity_key = *entity.account().key();
         let header = entity.header_mut();
         header.kind = EntityKind::Locker;
-        header.id = id;
-        header.parent_id = id;
+        // header.id = id;
+        // header.parent_id = id;
         header.root = entity_key;
 
         let expected_program_authority = Pubkey::create_program_address(
@@ -305,10 +309,10 @@ where
 
         let now = timestamp_now();
 
-        if entity.release_date <= now {
-            qlog!("can`t initialize new locker with invalid unlock date");
-            return Err(Error::InvalidData.into());
-        }
+        // if entity.release_date <= now {
+        //     qlog!("can`t initialize new locker with invalid unlock date");
+        //     return Err(Error::InvalidData.into());
+        // }
 
         Ok(())
     }
@@ -326,8 +330,6 @@ where
         source_authority: Pubkey,
     ) -> [Instruction; 4] {
         let mut instructions = todo!();
-
-        return instructions;
     }
 
     /// Relocks an existing locker with a new unlock date.
@@ -336,7 +338,7 @@ where
     /// Locker
     /// Locker Owner (signed)
     pub fn relock<S: AccountSource<B>>(
-        input: S,
+        mut input: S,
         unlock_date: SolTimestamp,
     ) -> Result<(), ProgramError> {
         let ReLockArgsAccounts {
@@ -369,7 +371,7 @@ where
     /// Program Authority
     /// Owner (signed)
     pub fn withdraw<S: AccountSource<B>>(
-        input: S,
+        mut input: S,
         amount: TokenAmount,
     ) -> Result<(), ProgramError> {
         let WithdrawArgsAccounts {
@@ -391,7 +393,7 @@ where
     /// SPL Token Wallet source
     /// Source Authority
     pub fn increment<S: AccountSource<B>>(
-        input: S,
+        mut input: S,
         amount: TokenAmount,
     ) -> Result<(), ProgramError> {
         let IncrementArgsAccounts {
@@ -412,7 +414,10 @@ where
     /// Program Authority
     /// SPL Token Vault (Source Locker)
     /// SPL Token Vault (New Locker)
-    pub fn split<S: AccountSource<B>>(input: S, amount: TokenAmount) -> Result<(), ProgramError> {
+    pub fn split<S: AccountSource<B>>(
+        mut input: S,
+        amount: TokenAmount,
+    ) -> Result<(), ProgramError> {
         let SplitArgsAccounts {
             source_locker,
             new_locker,
@@ -430,7 +435,7 @@ where
     /// Owner (signed)
     /// New Owner
     pub fn change_owner<S: AccountSource<B>>(
-        input: S,
+        mut input: S,
         amount: TokenAmount,
     ) -> Result<(), ProgramError> {
         let ChangeOwnerArgsAccounts {
