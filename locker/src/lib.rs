@@ -207,6 +207,8 @@ impl<B: AccountBackend> WithdrawArgsAccounts<B> {
 
 #[derive(Debug)]
 pub struct IncrementArgsAccounts<B: AccountBackend> {
+    pub token_program: TokenProgram<B>,
+
     pub locker: Entity<B, TokenLock>,
     pub spl_token_wallet_vault: WalletAccount<B>,
     pub source_spl_token_wallet: B,
@@ -217,7 +219,11 @@ impl<B: AccountBackend> IncrementArgsAccounts<B> {
     #[cfg(feature = "onchain")]
     #[inline]
     pub fn from_program_input<T: AccountSource<B>>(input: &mut T) -> Result<Self, Error> {
+        let program_id = *input.program_id();
+
         parse_accounts! {
+            &token_program = TokenProgram::load(this)?,
+
             &locker = <Entity<B, TokenLock>>::load(&program_id, this)?,
             &spl_token_wallet_vault,
             &source_spl_token_wallet,
@@ -240,7 +246,7 @@ pub struct SplitArgsAccounts<B: AccountBackend> {
     pub source_locker: Entity<B, TokenLock>,
     pub new_locker: B, //(empty, uninitialized)
     pub source_spl_token_wallet_vault: WalletAccount<B>,
-    pub new_spl_token_vault: WalletAccount<B>,
+    pub new_spl_token_wallet_vault: WalletAccount<B>,
 }
 
 impl<B: AccountBackend> SplitArgsAccounts<B> {
@@ -259,7 +265,7 @@ impl<B: AccountBackend> SplitArgsAccounts<B> {
 
         Ok(Self {
             token_program,
-            
+
             source_locker,
             new_locker,
             spl_token_wallet_vault,
@@ -282,7 +288,7 @@ impl<B: AccountBackend> ChangeOwnerArgsAccounts<B> {
     pub fn from_program_input<T: AccountSource<B>>(input: &mut T) -> Result<Self, Error> {
         let program_id = *input.program_id();
         parse_accounts! {
-            &locker = <Entity<B, TokenLock>>::load(&program_id, this)?,
+            &mut locker = <Entity<B, TokenLock>>::load(&program_id, this)?,
             &source_owner_authority,
             &new_owner_authority,
         }
@@ -415,11 +421,14 @@ where
             return Err(Error::InvalidData);
         }
 
-        todo!();
-
         locker.release_date = unlock_date;
 
         Ok(())
+    }
+
+    #[inline]
+    pub fn can_withdraw(&self, now: Checked<i64>) -> bool {
+        SolTimestamp::from(now.value()) > self.release_date
     }
 
     /// Withdraw funds from locker.
@@ -444,6 +453,22 @@ where
             owner_authority,
         } = WithdrawArgsAccounts::from_program_input(input)?;
 
+        let now = timestamp_now();
+
+        if !pubkey_eq(locker.owner, owner_authority.key()) {
+            qlog!("provided owner authority does not match expected authority");
+            return Err(Error::InvalidAuthority);
+        }
+
+        if !locker.can_withdraw(now) {
+            qlog!("can't withdraw until release date");
+            return Err(Error::Validation);
+        }
+
+        if spl_token_wallet_vault.amount() < amount {
+            qlog!("not enough funds in locker for withdraw");
+            return Err(Error::Validation);
+        }
 
         let amount_before = spl_token_wallet_vault.amount();
         token_program
@@ -473,16 +498,43 @@ where
     pub fn increment<S: AccountSource<B>>(
         input: S,
         amount: TokenAmount,
-    ) -> Result<(), ProgramError> {
+    ) -> Result<(), Error> {
 
         let IncrementArgsAccounts {
+            token_program,
+
             locker,
             spl_token_wallet_vault,
             source_spl_token_wallet,
             source_authority,
         } = IncrementArgsAccounts::from_program_input(input)?;
 
-        todo!();
+        if source_spl_token_wallet.amount() < amount {
+            qlog!("not enough funds in wallet");
+            return Err(Error::Validation);
+        }
+
+        let now = timestamp_now();
+
+        if locker.can_withdraw(now) {
+            qlog!("unlocked and can't be incremented");
+            return Err(Error::Validation);
+        }
+
+        let amount_before = source_spl_token_wallet.amount();
+        token_program
+            .transfer(
+                &mut source_spl_token_wallet,
+                &mut spl_token_wallet_vault,
+                amount.value(),
+                &source_authority,
+                &[],
+            )
+            .bpf_expect("call failed")
+            .bpf_expect("transfer failed");
+        let amount_after = source_spl_token_wallet.amount();
+
+        assert!(amount_after - amount_before == amount);
 
         Ok(())
     }
@@ -495,7 +547,7 @@ where
     /// Program Authority
     /// SPL Token Vault (Source Locker)
     /// SPL Token Vault (New Locker)
-    pub fn split<S: AccountSource<B>>(input: S, amount: TokenAmount) -> Result<(), ProgramError> {
+    pub fn split<S: AccountSource<B>>(input: S, amount: TokenAmount) -> Result<(), Error> {
         
         let SplitArgsAccounts {
             token_program,
@@ -505,6 +557,18 @@ where
             source_spl_token_wallet_vault,
             new_spl_token_wallet_vault,
         } = SplitArgsAccounts::from_program_input(input)?;
+
+        let now = timestamp_now();
+
+        if source_locker.can_withdraw(now) {
+            qlog!("unlocked and can't be splitted");
+            return Err(Error::Validation);
+        }
+
+        if !pubkey_eq(source_locker.owner, new_spl_token_wallet_vault.owner()) {
+            qlog!("locker owner authority does not match destination wallet vault owner ");
+            return Err(Error::InvalidAuthority);
+        }
 
         let mut entity = Self::raw_any(input.program_id(), new_locker)?;
 
@@ -535,8 +599,6 @@ where
 
         assert!(amount_after - amount_before == amount);
 
-        todo!();
-
         Ok(())
     }
 
@@ -556,6 +618,18 @@ where
             source_owner_authority,
             new_owner_authority,
         } = ChangeOwnerArgsAccounts::from_program_input(input)?;
+
+        if !pubkey_eq(locker.owner, source_owner_authority.key()) {
+            qlog!("locker owner authority does not match provided source owner autority");
+            return Err(Error::InvalidAuthority);
+        }
+
+        let now = timestamp_now();
+
+        if locker.can_withdraw(now) {
+            qlog!("unlocked and can't change owner");
+            return Err(Error::Validation);
+        }
 
         locker.owner = *new_owner_authority.key();
 
