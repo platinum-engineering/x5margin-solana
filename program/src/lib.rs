@@ -220,13 +220,13 @@ mod test {
             &instrs,
             Some(&payer.pubkey()),
             &vec![
-                &payer,
-                &stake_mint_key,
-                &stake_vault_key,
-                &pool_key,
-                &aux_wallet_key,
-                &pool_administrator_key,
-                &staker_ticket_key,
+                payer,
+                stake_mint_key,
+                stake_vault_key,
+                pool_key.clone(),
+                aux_wallet_key,
+                pool_administrator_key,
+                staker_ticket_key.clone(),
             ],
             hash,
         );
@@ -252,7 +252,6 @@ mod test {
         assert!(stake_pool.stake_acquired_amount == 10000.into());
         assert!(stake_pool.stake_target_amount == 10000.into());
         assert!(staker_ticket.staked_amount == 10000.into());
-
         Ok(())
     }
 
@@ -353,7 +352,7 @@ mod test {
         let trx = Transaction::new_signed_with_payer(
             &instrs,
             Some(&payer.pubkey()),
-            &vec![&payer, &stake_mint_key, &stake_vault_key, &pool_key],
+            &vec![payer, stake_mint_key, stake_vault_key, pool_key],
             hash,
         );
 
@@ -460,7 +459,7 @@ mod test {
         let trx = Transaction::new_signed_with_payer(
             &instrs,
             Some(&payer.pubkey()),
-            &vec![&payer, &stake_mint_key, &stake_vault_key, &pool_key],
+            &vec![payer, stake_mint_key, stake_vault_key, pool_key],
             hash,
         );
 
@@ -565,7 +564,7 @@ mod test {
         let trx = Transaction::new_signed_with_payer(
             &instrs,
             Some(&payer.pubkey()),
-            &vec![&payer, &stake_mint_key, &stake_vault_key, &pool_key],
+            &vec![payer, stake_mint_key, stake_vault_key, pool_key],
             hash,
         );
 
@@ -672,7 +671,7 @@ mod test {
         let trx = Transaction::new_signed_with_payer(
             &instrs,
             Some(&payer.pubkey()),
-            &vec![&payer, &stake_mint_key, &stake_vault_key, &pool_key],
+            &vec![payer, stake_mint_key, stake_vault_key, pool_key],
             hash,
         );
 

@@ -38,7 +38,7 @@ pub use error::{ClientError, ClientErrorKind, RpcError};
 pub use hash::Hash;
 pub use instruction::{Instruction, InstructionError};
 pub use pubkey::Pubkey;
-pub use signature::Signature;
+pub use signature::{Signature, SignerError};
 pub use signers::Signers;
 pub use transaction::{Transaction, TransactionError, TransactionStatus};
 
