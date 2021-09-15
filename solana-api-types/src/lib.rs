@@ -120,6 +120,17 @@ impl AccountMeta {
     }
 }
 
+#[cfg(feature = "runtime-test")]
+impl From<solana_program::instruction::AccountMeta> for AccountMeta {
+    fn from(am: solana_program::instruction::AccountMeta) -> Self {
+        Self {
+            pubkey: am.pubkey.into(),
+            is_signer: am.is_signer,
+            is_writable: am.is_writable,
+        }
+    }
+}
+
 /// An instruction to execute a program
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 #[serde(rename_all = "camelCase")]

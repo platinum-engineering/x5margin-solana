@@ -15,6 +15,13 @@ use crypto_imports::*;
 #[derive(Debug)]
 pub struct Keypair(ed25519_dalek::Keypair);
 
+#[cfg(feature = "crypto")]
+impl AsRef<Keypair> for Keypair {
+    fn as_ref(&self) -> &Keypair {
+        self
+    }
+}
+
 /// The `Signer` trait declares operations that all digital signature providers
 /// must support. It is the primary interface by which signers are specified in
 /// `Transaction` signing interfaces
@@ -74,25 +81,6 @@ impl Keypair {
     /// Gets this `Keypair`'s SecretKey
     pub fn secret(&self) -> &ed25519_dalek::SecretKey {
         &self.0.secret
-    }
-}
-
-#[cfg(feature = "crypto")]
-impl Signer for Keypair {
-    fn pubkey(&self) -> Pubkey {
-        Pubkey::new(self.0.public.as_ref().try_into().expect("infallible"))
-    }
-
-    fn try_pubkey(&self) -> Result<Pubkey, SignerError> {
-        Ok(self.pubkey())
-    }
-
-    fn sign_message(&self, message: &[u8]) -> Signature {
-        Signature::new(self.0.sign(message).to_bytes())
-    }
-
-    fn try_sign_message(&self, message: &[u8]) -> Result<Signature, SignerError> {
-        Ok(self.sign_message(message))
     }
 }
 

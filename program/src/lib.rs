@@ -75,11 +75,13 @@ impl Entrypoint for Program {
 #[cfg(feature = "onchain")]
 #[cfg(test)]
 mod test {
+    use std::mem::size_of;
+
     use parity_scale_codec::Encode;
     use solana_program_test::builtin_process_instruction;
     use solar::{
         input::wrapped_entrypoint,
-        spl::{create_mint, create_wallet, mint_to},
+        spl::{create_mint, create_wallet, mint_to, Mint, Wallet},
         util::minimum_balance,
     };
 
@@ -244,8 +246,8 @@ mod test {
             .unwrap()
             .unwrap();
 
-        let stake_pool = StakePoolEntity::load(&program_id, &stake_pool).unwrap();
-        let staker_ticket = stake_pool.load_ticket(&staker_ticket).unwrap();
+        let stake_pool = StakePoolEntity::load(&program_id, Box::new(stake_pool)).unwrap();
+        let staker_ticket = stake_pool.load_ticket(Box::new(staker_ticket)).unwrap();
 
         assert!(stake_pool.stake_acquired_amount == 10000.into());
         assert!(stake_pool.stake_target_amount == 10000.into());
@@ -282,8 +284,8 @@ mod test {
             );
 
             match pool_program_authority {
-                Ok(s) => break s,
-                Err(_) => {
+                Some(s) => break s,
+                None => {
                     salt += 1;
                 }
             }
@@ -319,20 +321,22 @@ mod test {
                 &program_id,
             ),
             spl_token::instruction::initialize_mint(
-                &solar::spl::ID,
-                &stake_mint_key.pubkey(),
-                &pool_administrator_key.pubkey(),
+                &solar::spl::ID.compat(),
+                &stake_mint_key.pubkey().compat(),
+                &pool_administrator_key.pubkey().compat(),
                 None,
                 6,
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
             spl_token::instruction::initialize_account(
-                &solar::spl::ID,
-                &stake_vault_key.pubkey(),
-                &stake_mint_key.pubkey(),
-                &pool_program_authority,
+                &solar::spl::ID.compat(),
+                &stake_vault_key.pubkey().compat(),
+                &stake_mint_key.pubkey().compat(),
+                &pool_program_authority.compat(),
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
             Instruction {
                 program_id,
                 accounts: vec![
@@ -387,8 +391,8 @@ mod test {
             );
 
             match pool_program_authority {
-                Ok(s) => break s,
-                Err(_) => {
+                Some(s) => break s,
+                None => {
                     salt += 1;
                 }
             }
@@ -424,20 +428,22 @@ mod test {
                 &program_id,
             ),
             spl_token::instruction::initialize_mint(
-                &solar::spl::ID,
-                &stake_mint_key.pubkey(),
-                &pool_administrator_key.pubkey(),
+                &solar::spl::ID.compat(),
+                &stake_mint_key.pubkey().compat(),
+                &pool_administrator_key.pubkey().compat(),
                 None,
                 6,
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
             spl_token::instruction::initialize_account(
-                &solar::spl::ID,
-                &stake_vault_key.pubkey(),
-                &stake_mint_key.pubkey(),
-                &pool_program_authority,
+                &solar::spl::ID.compat(),
+                &stake_vault_key.pubkey().compat(),
+                &stake_mint_key.pubkey().compat(),
+                &pool_program_authority.compat(),
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
             Instruction {
                 program_id,
                 accounts: vec![
@@ -465,7 +471,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn clim_reward_test() -> anyhow::Result<()> {
+    async fn claim_reward_test() -> anyhow::Result<()> {
         let mut program_test = ProgramTest::default();
         let program_id = Pubkey::new_unique();
 
@@ -492,8 +498,8 @@ mod test {
             );
 
             match pool_program_authority {
-                Ok(s) => break s,
-                Err(_) => {
+                Some(s) => break s,
+                None => {
                     salt += 1;
                 }
             }
@@ -527,20 +533,22 @@ mod test {
                 &program_id,
             ),
             spl_token::instruction::initialize_mint(
-                &solar::spl::ID,
-                &stake_mint_key.pubkey(),
-                &pool_administrator_key.pubkey(),
+                &solar::spl::ID.compat(),
+                &stake_mint_key.pubkey().compat(),
+                &pool_administrator_key.pubkey().compat(),
                 None,
                 6,
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
             spl_token::instruction::initialize_account(
-                &solar::spl::ID,
-                &stake_vault_key.pubkey(),
-                &stake_mint_key.pubkey(),
-                &pool_program_authority,
+                &solar::spl::ID.compat(),
+                &stake_vault_key.pubkey().compat(),
+                &stake_mint_key.pubkey().compat(),
+                &pool_program_authority.compat(),
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
             Instruction {
                 program_id,
                 accounts: vec![
@@ -595,8 +603,8 @@ mod test {
             );
 
             match pool_program_authority {
-                Ok(s) => break s,
-                Err(_) => {
+                Some(s) => break s,
+                None => {
                     salt += 1;
                 }
             }
@@ -632,20 +640,22 @@ mod test {
                 &program_id,
             ),
             spl_token::instruction::initialize_mint(
-                &solar::spl::ID,
-                &stake_mint_key.pubkey(),
-                &pool_administrator_key.pubkey(),
+                &solar::spl::ID.compat(),
+                &stake_mint_key.pubkey().compat(),
+                &pool_administrator_key.pubkey().compat(),
                 None,
                 6,
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
             spl_token::instruction::initialize_account(
-                &solar::spl::ID,
-                &stake_vault_key.pubkey(),
-                &stake_mint_key.pubkey(),
-                &pool_program_authority,
+                &solar::spl::ID.compat(),
+                &stake_vault_key.pubkey().compat(),
+                &stake_mint_key.pubkey().compat(),
+                &pool_program_authority.compat(),
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
             Instruction {
                 program_id,
                 accounts: vec![

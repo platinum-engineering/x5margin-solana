@@ -264,3 +264,14 @@ impl Instruction {
         }
     }
 }
+
+#[cfg(feature = "runtime-test")]
+impl From<solana_program::instruction::Instruction> for Instruction {
+    fn from(i: solana_program::instruction::Instruction) -> Self {
+        Self {
+            program_id: i.program_id.into(),
+            accounts: i.accounts.into_iter().map(|i| i.into()).collect(),
+            data: i.data,
+        }
+    }
+}

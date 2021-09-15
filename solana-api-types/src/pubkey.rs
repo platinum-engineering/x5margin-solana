@@ -99,6 +99,13 @@ impl Pubkey {
             .decompress()
             .is_some()
     }
+
+    // Implemented as separate method instead of From/Into
+    // to aid type inference.
+    #[cfg(feature = "runtime-test")]
+    pub fn compat(&self) -> solana_program::pubkey::Pubkey {
+        solana_program::pubkey::Pubkey::new_from_array(self.0)
+    }
 }
 
 impl fmt::Debug for Pubkey {
@@ -116,6 +123,13 @@ impl fmt::Display for Pubkey {
 impl AsRef<[u8]> for Pubkey {
     fn as_ref(&self) -> &[u8] {
         &self.0[..]
+    }
+}
+
+#[cfg(feature = "runtime-test")]
+impl From<solana_program::pubkey::Pubkey> for Pubkey {
+    fn from(p: solana_program::pubkey::Pubkey) -> Self {
+        Self(p.to_bytes())
     }
 }
 
