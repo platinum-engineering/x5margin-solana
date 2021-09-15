@@ -55,7 +55,6 @@ jobs:
       - uses: Swatinem/rust-cache@v1
         with:
           working-directory: ./program
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --features onchain
+      - run: |
+          cargo test --features onchain
+        working-directory: ./program
