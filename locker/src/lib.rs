@@ -1,40 +1,32 @@
 use fixed::types::U64F64;
-use std::mem::size_of;
-use std::convert::TryFrom;
 use parity_scale_codec::Decode;
+use std::convert::TryFrom;
+use std::mem::size_of;
 
-use solana_api_types::{
-    program::ProgramError, 
-    Instruction, 
-    Pubkey,
-};
+use solana_api_types::{program::ProgramError, Instruction, Pubkey};
 
 #[cfg(feature = "onchain")]
 use az::CheckedAs;
 
 #[cfg(feature = "onchain")]
 use solar::{
-    input::{
-        AccountSource,
-        BpfProgramInput,
-        account::onchain::Account, 
-    },
+    input::{account::onchain::Account, AccountSource, BpfProgramInput},
     util::timestamp_now,
 };
 
 use solar::{
     account::{AccountFields, AccountFieldsMut},
-    input::{AccountSource},
+    input::AccountSource,
     math::Checked,
     prelude::AccountBackend,
-    time::SolTimestamp,
-    util::{ResultExt, pubkey_eq, timestamp_now},
-    spl::{WalletAccount, TokenProgram},
     qlog,
+    spl::{TokenProgram, WalletAccount},
+    time::SolTimestamp,
+    util::{pubkey_eq, timestamp_now, ResultExt},
 };
 
+pub mod data;
 pub mod error;
-pub mod data; 
 
 #[macro_use]
 extern crate parity_scale_codec;
@@ -43,14 +35,8 @@ extern crate parity_scale_codec;
 extern crate solar_macros;
 
 use crate::{
+    data::{AccountType, Entity, EntityAllocator, EntityKind, HEADER_RESERVED},
     error::Error,
-    data::{
-        Entity,
-        AccountType,
-        EntityKind,
-        EntityAllocator,
-        HEADER_RESERVED,
-    },
 };
 
 pub type TokenAmount = Checked<u64>;
@@ -113,7 +99,7 @@ impl_entity_simple_deref!(TokenLock, TokenLockState);
 pub struct CreateArgsAccounts<B: AccountBackend> {
     pub locker: B, //(empty, uninitialized)
     pub source_spl_token_wallet: WalletAccount<B>,
-    pub source_authority: B, //(signed)
+    pub source_authority: B,                      //(signed)
     pub spl_token_wallet_vault: WalletAccount<B>, //(authority = program authority)
     pub program_authority: B,
     pub owner_authority: B, //withdraw authority
@@ -180,7 +166,6 @@ impl<B: AccountBackend> WithdrawArgsAccounts<B> {
     #[cfg(feature = "onchain")]
     #[inline]
     pub fn from_program_input<T: AccountSource<B>>(input: &mut T) -> Result<Self, Error> {
-
         let program_id = *input.program_id();
 
         parse_accounts! {
@@ -212,7 +197,7 @@ pub struct IncrementArgsAccounts<B: AccountBackend> {
     pub locker: Entity<B, TokenLock>,
     pub spl_token_wallet_vault: WalletAccount<B>,
     pub source_spl_token_wallet: B,
-    pub source_authority: B, 
+    pub source_authority: B,
 }
 
 impl<B: AccountBackend> IncrementArgsAccounts<B> {
@@ -314,16 +299,12 @@ where
     /// SPL Token Wallet vault (authority = program authority)
     /// Program Authority
     /// Owner (withdraw authority)
-    pub fn create<T>(
-        input: T,
-        unlock_date: SolTimestamp,
-        amount: TokenAmount,
-    ) -> Result<(), Error> 
-    where 
+    #[cfg(feature = "onchain")]
+    pub fn create<T>(input: T, unlock_date: SolTimestamp, amount: TokenAmount) -> Result<(), Error>
+    where
         B::Impl: AccountFieldsMut,
         T: AccountSource<B>,
     {
-
         let CreateArgsAccounts {
             locker,
             source_spl_token_wallet,
@@ -361,7 +342,10 @@ where
             return Err(Error::InvalidAuthority);
         }
 
-        if !pubkey_eq(spl_token_wallet_vault.authority(), &expected_program_authority) {
+        if !pubkey_eq(
+            spl_token_wallet_vault.authority(),
+            &expected_program_authority,
+        ) {
             qlog!("spl token wallet vault authority does not match program authority");
             return Err(Error::InvalidAuthority);
         }
@@ -381,6 +365,7 @@ where
     /// SplToken::Initialize (locker vault)
     /// SystemProgram::Create (locker)
     /// Locker::Create (locker)
+    #[cfg(feature = "onchain")]
     pub fn create_instruction(
         locker: Pubkey,
         owner: Pubkey,
@@ -388,7 +373,6 @@ where
         source_mint: Pubkey,
         source_authority: Pubkey,
     ) -> [Instruction; 4] {
-
         let mut instructions = vec![];
 
         todo!();
@@ -401,11 +385,8 @@ where
     /// Input accounts:
     /// Locker
     /// Locker Owner (signed)
-    pub fn relock<S: AccountSource<B>>(
-        input: S,
-        unlock_date: SolTimestamp,
-    ) -> Result<(), Error> {
-
+    #[cfg(feature = "onchain")]
+    pub fn relock<S: AccountSource<B>>(input: S, unlock_date: SolTimestamp) -> Result<(), Error> {
         let ReLockArgsAccounts {
             locker,
             owner_authority,
@@ -438,11 +419,8 @@ where
     /// SPL Token Wallet destination
     /// Program Authority
     /// Owner (signed)
-    pub fn withdraw<S: AccountSource<B>>(
-        input: S,
-        amount: TokenAmount,
-    ) -> Result<(), Error> {
-
+    #[cfg(feature = "onchain")]
+    pub fn withdraw<S: AccountSource<B>>(input: S, amount: TokenAmount) -> Result<(), Error> {
         let WithdrawArgsAccounts {
             token_program,
 
@@ -495,11 +473,8 @@ where
     /// SPL Token Wallet vault
     /// SPL Token Wallet source
     /// Source Authority
-    pub fn increment<S: AccountSource<B>>(
-        input: S,
-        amount: TokenAmount,
-    ) -> Result<(), Error> {
-
+    #[cfg(feature = "onchain")]
+    pub fn increment<S: AccountSource<B>>(input: S, amount: TokenAmount) -> Result<(), Error> {
         let IncrementArgsAccounts {
             token_program,
 
@@ -547,8 +522,8 @@ where
     /// Program Authority
     /// SPL Token Vault (Source Locker)
     /// SPL Token Vault (New Locker)
+    #[cfg(feature = "onchain")]
     pub fn split<S: AccountSource<B>>(input: S, amount: TokenAmount) -> Result<(), Error> {
-        
         let SplitArgsAccounts {
             token_program,
 
@@ -608,11 +583,8 @@ where
     /// Locker
     /// Owner (signed)
     /// New Owner
-    pub fn change_owner<S: AccountSource<B>>(
-        input: S,
-        amount: TokenAmount,
-    ) -> Result<(), Error> {
-
+    #[cfg(feature = "onchain")]
+    pub fn change_owner<S: AccountSource<B>>(input: S, amount: TokenAmount) -> Result<(), Error> {
         let ChangeOwnerArgsAccounts {
             locker,
             source_owner_authority,
@@ -649,21 +621,11 @@ pub fn main(mut input: BpfProgramInput) -> Result<(), ProgramError> {
             unlock_date,
             amount,
         } => TokenLock::create(input, unlock_date, amount).bpf_unwrap(),
-        Method::ReLock {
-            unlock_date,
-        } => TokenLock::relock(input, unlock_date).bpf_unwra(),
-        Method::Withdraw {
-            amount,
-        } => withdraw(input, amount).bpf_unwra(),
-        Method::Increment {
-            amount,
-        } => increment(input, amount).bpf_unwra(),
-        Method::Split {
-            amount,
-        } => split(input, amount).bpf_unwra(),
-        Method::ChangeOwner {
-            amount,
-        } => change_owner(input, amount).bpf_unwra(),
+        Method::ReLock { unlock_date } => TokenLock::relock(input, unlock_date).bpf_unwra(),
+        Method::Withdraw { amount } => withdraw(input, amount).bpf_unwra(),
+        Method::Increment { amount } => increment(input, amount).bpf_unwra(),
+        Method::Split { amount } => split(input, amount).bpf_unwra(),
+        Method::ChangeOwner { amount } => change_owner(input, amount).bpf_unwra(),
     }
 
     Ok(())
@@ -675,7 +637,6 @@ mod test {
 
     #[tokio::test]
     async fn init_test() -> anyhow::Result<()> {
-
         let mut program_test = ProgramTest::default();
         let program_id = Pubkey::new_unique();
 
