@@ -66,7 +66,7 @@ macro_rules! impl_sysvar_get {
                 .map_err(|err| crate::program::ProgramError::from_sdk(&err))
         }
 
-        #[cfg(not(target_arch = "bpf"))]
+        #[cfg(all(not(target_arch = "bpf"), not(feature = "runtime-test")))]
         fn get() -> Result<Self, $crate::program::ProgramError> {
             let mut var = Self::default();
             let var_addr = &mut var as *mut _ as *mut u8;

@@ -30,8 +30,8 @@ mod onchain {
 
     use solana_api_types::{entrypoint::MAX_PERMITTED_DATA_INCREASE, program::ProgramResult};
 
-    use crate::account::onchain::{Account, AccountRef};
     use super::*;
+    use crate::account::onchain::{Account, AccountRef};
 
     #[cfg(feature = "onchain")]
     pub struct BpfProgramInput {
@@ -233,6 +233,10 @@ pub fn wrapped_entrypoint<T: Entrypoint>(
     account_infos: &[solana_program::account_info::AccountInfo],
     data: &[u8],
 ) -> Result<(), solana_program::program_error::ProgramError> {
+    use std::mem::MaybeUninit;
+
+    use crate::account::onchain::Account;
+
     if account_infos.len() > MAX_ACCOUNTS {
         panic!("too many accounts");
     }

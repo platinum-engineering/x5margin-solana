@@ -11,6 +11,7 @@ extern crate strum;
 
 pub mod account;
 pub mod collections;
+pub mod entity;
 #[cfg(feature = "onchain")]
 pub mod entrypoint;
 pub mod input;

@@ -8,7 +8,7 @@ use solana_api_types::{
     Pubkey,
 };
 
-use crate::{log::Loggable, math::Checked, mem::memcmp, qlog};
+use crate::{log::Loggable, math::Checked, mem::memcmp, qlog, time::SolTimestamp};
 
 #[macro_export]
 macro_rules! bytecode_marker {
@@ -215,6 +215,10 @@ pub fn is_zeroed(slice: &[u8]) -> bool {
 }
 
 pub fn timestamp_now() -> Checked<i64> {
+    Clock::get().bpf_unwrap().unix_timestamp.into()
+}
+
+pub fn sol_timestamp_now() -> SolTimestamp {
     Clock::get().bpf_unwrap().unix_timestamp.into()
 }
 
