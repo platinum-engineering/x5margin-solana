@@ -1031,9 +1031,28 @@ impl LockerInstructionBuilder {
                 AccountMeta::new_readonly(self.administrator_key.to_pubkey(), false),
                 AccountMeta::new_readonly(self.locker.to_pubkey(), false),
                 AccountMeta::new(self.locker.to_pubkey(), false),
-                todo!(),
             ],
-            data: todo!(),
+            data: token_locker::Method::CreateLock {
+                unlock_date: unlock_date.into(),
+                amount: amount.into(),
+            }
+            .encode(),
+        }
+        .into()
+    }
+
+    pub fn withdraw(&self, destination: Pk, amount: u64) -> Instr {
+        Instruction {
+            program_id: self.program_id.to_pubkey(),
+            accounts: vec![
+                AccountMeta::new_readonly(self.administrator_key.to_pubkey(), false),
+                AccountMeta::new_readonly(self.locker.to_pubkey(), false),
+                AccountMeta::new(self.locker.to_pubkey(), false),
+            ],
+            data: token_locker::Method::Withdraw {
+                amount: amount.into(),
+            }
+            .encode(),
         }
         .into()
     }

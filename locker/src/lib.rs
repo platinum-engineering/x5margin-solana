@@ -39,8 +39,12 @@ pub enum Method {
     ReLock {
         unlock_date: SolTimestamp,
     },
-    Withdraw,
-    Increment,
+    Withdraw {
+        amount: TokenAmount,
+    },
+    Increment {
+        amount: TokenAmount,
+    },
     Split,
     ChangeOwner,
 }
@@ -124,7 +128,7 @@ impl<B: AccountBackend> WithdrawArgsAccounts<B> {
             &vault = WalletAccount::any(this)?,
             &destination_wallet = WalletAccount::any(this)?,
             &program_authority = Authority::expected(this, &locker.read().program_authority)?,
-            &owner_authority = Authority::expected(this, &locker.read().withdraw_authority)?,
+            &owner_authority = Authority::expected_signed(this, &locker.read().withdraw_authority)?,
         }
 
         Ok(Self {
@@ -331,20 +335,44 @@ impl<B: AccountBackend> TokenLock<B> {
     /// SPL Token Wallet destination
     /// Program Authority
     /// Owner (signed)
-    pub fn withdraw<S: AccountSource<B>>(
-        mut input: S,
-        amount: TokenAmount,
-    ) -> Result<(), ProgramError> {
+    pub fn withdraw<S: AccountSource<B>>(mut input: S, amount: TokenAmount) -> Result<(), Error>
+    where
+        B: AccountBackend<Impl = onchain::Account>,
+    {
         let WithdrawArgsAccounts {
             token_program,
             locker,
-            vault: spl_token_wallet_vault,
-            destination_wallet: destination_spl_token_wallet,
+            mut vault,
+            mut destination_wallet,
             program_authority,
             owner_authority,
         } = WithdrawArgsAccounts::from_program_input(&mut input)?;
 
-        todo!()
+        if locker.read().release_date > sol_timestamp_now() {
+            qlog!("too early to withdraw");
+            return Err(Error::Validation);
+        }
+
+        if !pubkey_eq(&locker.read().vault, vault.key()) {
+            qlog!("invalid vault");
+            return Err(Error::Validation);
+        }
+
+        token_program
+            .transfer(
+                &mut vault,
+                &mut destination_wallet,
+                amount.value(),
+                &program_authority,
+                &[&[
+                    locker.account().key().as_ref(),
+                    owner_authority.key().as_ref(),
+                ]],
+            )
+            .bpf_expect("transfer")
+            .bpf_expect("transfer");
+
+        Ok(())
     }
 
     /// Add funds to locker
@@ -354,17 +382,38 @@ impl<B: AccountBackend> TokenLock<B> {
     /// SPL Token Wallet vault
     /// SPL Token Wallet source
     /// Source Authority
-    pub fn increment<S: AccountSource<B>>(
-        mut input: S,
-        amount: TokenAmount,
-    ) -> Result<(), ProgramError> {
+    pub fn increment<S: AccountSource<B>>(mut input: S, amount: TokenAmount) -> Result<(), Error>
+    where
+        B: AccountBackend<Impl = onchain::Account>,
+    {
         let IncrementArgsAccounts {
             token_program,
             locker,
-            vault: spl_token_wallet_vault,
-            source_wallet: source_spl_token_wallet,
+            mut vault,
+            mut source_wallet,
             source_authority,
         } = IncrementArgsAccounts::from_program_input(&mut input)?;
+
+        if locker.read().release_date <= sol_timestamp_now() {
+            qlog!("too late to increment");
+            return Err(Error::Validation);
+        }
+
+        if !pubkey_eq(&locker.read().vault, vault.key()) {
+            qlog!("invalid vault");
+            return Err(Error::Validation);
+        }
+
+        token_program
+            .transfer(
+                &mut source_wallet,
+                &mut vault,
+                amount.value(),
+                &source_authority,
+                &[],
+            )
+            .bpf_expect("transfer")
+            .bpf_expect("transfer");
 
         todo!()
     }
@@ -377,10 +426,7 @@ impl<B: AccountBackend> TokenLock<B> {
     /// Program Authority
     /// SPL Token Vault (Source Locker)
     /// SPL Token Vault (New Locker)
-    pub fn split<S: AccountSource<B>>(
-        mut input: S,
-        amount: TokenAmount,
-    ) -> Result<(), ProgramError> {
+    pub fn split<S: AccountSource<B>>(mut input: S, amount: TokenAmount) -> Result<(), Error> {
         let SplitArgsAccounts {
             token_program,
             new_vault,
@@ -401,7 +447,7 @@ impl<B: AccountBackend> TokenLock<B> {
     pub fn change_owner<S: AccountSource<B>>(
         mut input: S,
         amount: TokenAmount,
-    ) -> Result<(), ProgramError> {
+    ) -> Result<(), Error> {
         let ChangeOwnerArgsAccounts {
             locker,
             source_owner_authority,
@@ -413,7 +459,7 @@ impl<B: AccountBackend> TokenLock<B> {
 }
 
 #[cfg(feature = "onchain")]
-pub fn main(mut input: BpfProgramInput) -> Result<(), ProgramError> {
+pub fn main(input: BpfProgramInput) -> Result<(), ProgramError> {
     let mut data = input.data();
     let method = Method::decode(&mut data)
         .ok()
@@ -425,8 +471,8 @@ pub fn main(mut input: BpfProgramInput) -> Result<(), ProgramError> {
             amount,
         } => TokenLock::create(input, unlock_date, amount).bpf_unwrap(),
         Method::ReLock { unlock_date } => TokenLock::relock(input, unlock_date).bpf_unwrap(),
-        Method::Withdraw => todo!(),
-        Method::Increment => todo!(),
+        Method::Withdraw { amount } => TokenLock::withdraw(input, amount).bpf_unwrap(),
+        Method::Increment { amount } => TokenLock::increment(input, amount).bpf_unwrap(),
         Method::Split => todo!(),
         Method::ChangeOwner => todo!(),
     }
@@ -484,8 +530,6 @@ mod test {
         };
 
         let (mut client, payer, hash) = program_test.start().await;
-
-        todo!();
 
         Ok(())
     }
