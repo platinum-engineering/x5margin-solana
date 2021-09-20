@@ -3,6 +3,7 @@ use solana_api_types::Pubkey;
 pub mod offchain;
 #[cfg(feature = "onchain")]
 pub mod onchain;
+pub mod pubkey;
 
 /// A trait for abstracting over the underlying account storage type, which can be
 /// different for on-chain and off-chain logic.

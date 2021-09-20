@@ -538,14 +538,14 @@ pub struct MintAccount {
 }
 
 impl MintAccount {
-    fn any(account: Account) -> Result<Self, solar::spl::SplReadError> {
+    fn any(account: Account) -> Result<Self, solar::error::SolarError> {
         let account = Box::new(account);
         let account = solar::spl::MintAccount::any(account)?;
 
         Ok(MintAccount { account })
     }
 
-    fn wallet(&self, account: Account) -> Result<WalletAccount, solar::spl::SplReadError> {
+    fn wallet(&self, account: Account) -> Result<WalletAccount, solar::error::SolarError> {
         let account = Box::new(account);
         let account = self.account.wallet(account)?;
 
@@ -560,7 +560,7 @@ pub struct WalletAccount {
 }
 
 impl WalletAccount {
-    fn any(account: Account) -> Result<Self, solar::spl::SplReadError> {
+    fn any(account: Account) -> Result<Self, solar::error::SolarError> {
         let account = Box::new(account);
         let account = solar::spl::WalletAccount::any(account)?;
 

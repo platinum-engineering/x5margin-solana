@@ -1,18 +1,19 @@
 use data::TokenLock;
 use fixed::types::U64F64;
 use parity_scale_codec::Decode;
-use solana_api_types::{program::ProgramError, Instruction, Pubkey};
+use solana_api_types::{program::ProgramError, Pubkey};
 #[cfg(feature = "onchain")]
 use solar::input::BpfProgramInput;
 use solar::{
-    account::{AccountFields, AccountFieldsMut},
+    account::{onchain, AccountFields, AccountFieldsMut},
+    authority::Authority,
     input::{AccountSource, Entrypoint, ProgramInput},
     math::Checked,
     prelude::AccountBackend,
     qlog,
-    spl::WalletAccount,
+    spl::{TokenProgram, WalletAccount},
     time::SolTimestamp,
-    util::{pubkey_eq, sol_timestamp_now, timestamp_now, ResultExt},
+    util::{pubkey_eq, sol_timestamp_now, ResultExt},
 };
 
 pub mod data;
@@ -46,12 +47,13 @@ pub enum Method {
 
 #[derive(Debug)]
 pub struct CreateArgsAccounts<B: AccountBackend> {
+    pub token_program: TokenProgram<B>,
     pub locker: TokenLock<B>, //(empty, uninitialized)
     pub source_wallet: WalletAccount<B>,
-    pub source_authority: B,     //(signed)
-    pub vault: WalletAccount<B>, //(authority = program authority)
-    pub program_authority: B,
-    pub owner_authority: B, //withdraw authority
+    pub source_authority: Authority<B>, //(signed)
+    pub vault: WalletAccount<B>,        //(authority = program authority)
+    pub program_authority: Authority<B>,
+    pub owner_authority: Authority<B>, //withdraw authority
 }
 
 impl<B: AccountBackend> CreateArgsAccounts<B> {
@@ -59,15 +61,17 @@ impl<B: AccountBackend> CreateArgsAccounts<B> {
     #[inline]
     pub fn from_program_input<T: AccountSource<B>>(input: &mut T) -> Result<Self, Error> {
         parse_accounts! {
+            &token_program = TokenProgram::load(this)?,
             &mut locker = TokenLock::blank(input.program_id(), this)?,
             &source_wallet = WalletAccount::any(this)?,
-            &source_authority,
+            &source_authority = Authority::expected_signed(this, source_wallet.authority())?,
             &vault = WalletAccount::any(this)?,
-            &program_authority,
-            &owner_authority,
+            &program_authority = Authority::any(this),
+            &owner_authority = Authority::any_signed(this)?,
         }
 
         Ok(Self {
+            token_program,
             locker,
             source_wallet,
             source_authority,
@@ -80,8 +84,8 @@ impl<B: AccountBackend> CreateArgsAccounts<B> {
 
 #[derive(Debug)]
 pub struct ReLockArgsAccounts<B: AccountBackend> {
-    pub locker: TokenLock<B>, //(empty, uninitialized)
-    pub owner_authority: B,   //withdraw authority
+    pub locker: TokenLock<B>,          //(empty, uninitialized)
+    pub owner_authority: Authority<B>, //withdraw authority
 }
 
 impl<B: AccountBackend> ReLockArgsAccounts<B> {
@@ -90,7 +94,7 @@ impl<B: AccountBackend> ReLockArgsAccounts<B> {
     pub fn from_program_input<T: AccountSource<B>>(input: &mut T) -> Result<Self, Error> {
         parse_accounts! {
             &mut locker = TokenLock::initialized(input.program_id(), this)?,
-            &owner_authority,
+            &owner_authority = Authority::expected_signed(this, &locker.read().withdraw_authority)?,
         }
 
         Ok(Self {
@@ -102,11 +106,12 @@ impl<B: AccountBackend> ReLockArgsAccounts<B> {
 
 #[derive(Debug)]
 pub struct WithdrawArgsAccounts<B: AccountBackend> {
-    pub locker: B,
+    pub token_program: TokenProgram<B>,
+    pub locker: TokenLock<B>,
     pub vault: WalletAccount<B>,
-    pub destination_wallet: B,
-    pub program_authority: B,
-    pub owner_authority: B,
+    pub destination_wallet: WalletAccount<B>,
+    pub program_authority: Authority<B>,
+    pub owner_authority: Authority<B>,
 }
 
 impl<B: AccountBackend> WithdrawArgsAccounts<B> {
@@ -114,17 +119,19 @@ impl<B: AccountBackend> WithdrawArgsAccounts<B> {
     #[inline]
     pub fn from_program_input<T: AccountSource<B>>(input: &mut T) -> Result<Self, Error> {
         parse_accounts! {
-            &mut locker,
-            &spl_token_wallet_vault = WalletAccount::any(this)?,
-            &destination_spl_token_wallet,
-            &program_authority,
-            &owner_authority,
+            &token_program = TokenProgram::load(this)?,
+            &mut locker = TokenLock::initialized(input.program_id(), this)?,
+            &vault = WalletAccount::any(this)?,
+            &destination_wallet = WalletAccount::any(this)?,
+            &program_authority = Authority::expected(this, &locker.read().program_authority)?,
+            &owner_authority = Authority::expected(this, &locker.read().withdraw_authority)?,
         }
 
         Ok(Self {
+            token_program,
             locker,
-            vault: spl_token_wallet_vault,
-            destination_wallet: destination_spl_token_wallet,
+            vault,
+            destination_wallet,
             program_authority,
             owner_authority,
         })
@@ -133,10 +140,11 @@ impl<B: AccountBackend> WithdrawArgsAccounts<B> {
 
 #[derive(Debug)]
 pub struct IncrementArgsAccounts<B: AccountBackend> {
-    pub locker: B,
+    pub token_program: TokenProgram<B>,
+    pub locker: TokenLock<B>,
     pub vault: WalletAccount<B>,
-    pub source_wallet: B,
-    pub source_authority: B,
+    pub source_wallet: WalletAccount<B>,
+    pub source_authority: Authority<B>,
 }
 
 impl<B: AccountBackend> IncrementArgsAccounts<B> {
@@ -144,16 +152,18 @@ impl<B: AccountBackend> IncrementArgsAccounts<B> {
     #[inline]
     pub fn from_program_input<T: AccountSource<B>>(input: &mut T) -> Result<Self, Error> {
         parse_accounts! {
-            &locker,
-            &spl_token_wallet_vault = WalletAccount::any(this)?,
-            &source_spl_token_wallet,
-            &source_authority,
+            &token_program = TokenProgram::load(this)?,
+            &locker = TokenLock::initialized(input.program_id(), this)?,
+            &vault = WalletAccount::any(this)?,
+            &source_wallet = WalletAccount::any(this)?,
+            &source_authority = Authority::expected_signed(this, source_wallet.authority())?,
         }
 
         Ok(Self {
+            token_program,
             locker,
-            vault: spl_token_wallet_vault,
-            source_wallet: source_spl_token_wallet,
+            vault,
+            source_wallet,
             source_authority,
         })
     }
@@ -161,8 +171,9 @@ impl<B: AccountBackend> IncrementArgsAccounts<B> {
 
 #[derive(Debug)]
 pub struct SplitArgsAccounts<B: AccountBackend> {
+    pub token_program: TokenProgram<B>,
     pub source_locker: TokenLock<B>,
-    pub new_locker: TokenLock<B>, //(empty, uninitialized)
+    pub new_locker: TokenLock<B>,
     pub source_vault: WalletAccount<B>,
     pub new_vault: WalletAccount<B>,
 }
@@ -172,6 +183,7 @@ impl<B: AccountBackend> SplitArgsAccounts<B> {
     #[inline]
     pub fn from_program_input<T: AccountSource<B>>(input: &mut T) -> Result<Self, Error> {
         parse_accounts! {
+            &token_program = TokenProgram::load(this)?,
             &mut source_locker = TokenLock::initialized(input.program_id(), this)?,
             &mut new_locker = TokenLock::blank(input.program_id(), this)?,
             &source_vault = WalletAccount::any(this)?,
@@ -179,6 +191,7 @@ impl<B: AccountBackend> SplitArgsAccounts<B> {
         }
 
         Ok(Self {
+            token_program,
             new_vault,
             source_locker,
             new_locker,
@@ -228,13 +241,14 @@ impl<B: AccountBackend> TokenLock<B> {
         amount: TokenAmount,
     ) -> Result<(), Error>
     where
-        B::Impl: AccountFieldsMut,
+        B: AccountBackend<Impl = onchain::Account>,
     {
         let CreateArgsAccounts {
+            token_program,
             mut locker,
-            source_wallet: source_spl_token_wallet,
+            mut source_wallet,
             source_authority,
-            vault: spl_token_wallet_vault,
+            mut vault,
             program_authority,
             owner_authority,
         } = CreateArgsAccounts::from_program_input(&mut input)?;
@@ -260,18 +274,26 @@ impl<B: AccountBackend> TokenLock<B> {
             return Err(Error::InvalidAuthority);
         }
 
-        if !pubkey_eq(
-            spl_token_wallet_vault.authority(),
-            &expected_program_authority,
-        ) {
-            qlog!("spl token wallet vault authority does not match program authority");
+        if !pubkey_eq(vault.authority(), &expected_program_authority) {
+            qlog!("vault authority does not match program authority");
             return Err(Error::InvalidAuthority);
         }
 
+        token_program
+            .transfer(
+                &mut source_wallet,
+                &mut vault,
+                amount.value(),
+                &source_authority,
+                &[],
+            )
+            .bpf_expect("transfer")
+            .bpf_expect("transfer");
+
         let data = locker.read_mut();
         data.withdraw_authority = *owner_authority.key();
-        data.mint = *source_spl_token_wallet.mint();
-        data.vault = *spl_token_wallet_vault.key();
+        data.mint = *source_wallet.mint();
+        data.vault = *vault.key();
         data.program_authority = *program_authority.key();
         data.release_date = unlock_date;
 
@@ -291,11 +313,6 @@ impl<B: AccountBackend> TokenLock<B> {
             mut locker,
             owner_authority,
         } = ReLockArgsAccounts::from_program_input(&mut input)?;
-
-        if !pubkey_eq(locker.read().withdraw_authority, owner_authority.key()) {
-            qlog!("provided program authority does not match expected authority");
-            return Err(Error::InvalidAuthority);
-        }
 
         if unlock_date <= locker.read().release_date {
             qlog!("can`t initialize new locker with invalid unlock date");
@@ -319,6 +336,7 @@ impl<B: AccountBackend> TokenLock<B> {
         amount: TokenAmount,
     ) -> Result<(), ProgramError> {
         let WithdrawArgsAccounts {
+            token_program,
             locker,
             vault: spl_token_wallet_vault,
             destination_wallet: destination_spl_token_wallet,
@@ -341,6 +359,7 @@ impl<B: AccountBackend> TokenLock<B> {
         amount: TokenAmount,
     ) -> Result<(), ProgramError> {
         let IncrementArgsAccounts {
+            token_program,
             locker,
             vault: spl_token_wallet_vault,
             source_wallet: source_spl_token_wallet,
@@ -363,6 +382,7 @@ impl<B: AccountBackend> TokenLock<B> {
         amount: TokenAmount,
     ) -> Result<(), ProgramError> {
         let SplitArgsAccounts {
+            token_program,
             new_vault,
             source_locker,
             new_locker,

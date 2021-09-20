@@ -1,9 +1,5 @@
 use solana_api_types::program::ProgramError;
-use solar::{
-    entity::EntityError,
-    log::Loggable,
-    spl::{SplReadError, TokenError},
-};
+use solar::{entity::EntityError, error::SolarError, log::Loggable, spl::TokenError};
 
 #[derive(Debug)]
 pub enum Error {
@@ -17,15 +13,9 @@ pub enum Error {
     InvalidAccount,
     NotRentExempt,
     Validation,
-    SplReadError(SplReadError),
     TokenError(TokenError),
     EntityError(EntityError),
-}
-
-impl From<SplReadError> for Error {
-    fn from(other: SplReadError) -> Self {
-        Self::SplReadError(other)
-    }
+    SolarError(SolarError),
 }
 
 impl From<TokenError> for Error {
@@ -40,6 +30,12 @@ impl From<Error> for ProgramError {
     }
 }
 
+impl From<SolarError> for Error {
+    fn from(other: SolarError) -> Self {
+        Self::SolarError(other)
+    }
+}
+
 impl From<EntityError> for Error {
     fn from(other: EntityError) -> Self {
         Self::EntityError(other)
@@ -48,6 +44,6 @@ impl From<EntityError> for Error {
 
 impl Loggable for Error {
     fn push_to_logger<const S: usize>(&self, logger: &mut solar::log::Logger<S>) {
-        todo!()
+        // TODO
     }
 }

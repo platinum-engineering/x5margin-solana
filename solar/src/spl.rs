@@ -6,7 +6,9 @@ use solana_api_types::{system::create_account, sysvar, AccountMeta, Instruction,
 
 use crate::{
     account::{AccountBackend, AccountFields},
+    authority::Authority,
     collections::StaticVec,
+    error::SolarError,
     forward_account_backend,
     log::Loggable,
     math::Checked,
@@ -137,13 +139,6 @@ impl Wallet {
     }
 }
 
-#[derive(IntoStaticStr, Debug, Display, Clone, Copy, PartialEq, Eq)]
-pub enum SplReadError {
-    InvalidData,
-    InvalidOwner,
-    InvalidMint,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MintAccount<B: AccountBackend> {
     account: B,
@@ -184,23 +179,23 @@ pub struct TokenProgram<B> {
 }
 
 impl<'a, 'b: 'a, B: AccountBackend> MintAccount<B> {
-    pub fn any(account: B) -> Result<Self, SplReadError> {
+    pub fn any(account: B) -> Result<Self, SolarError> {
         let data = account.data();
 
         if !pubkey_eq(account.owner(), &*ID) {
-            Err(SplReadError::InvalidOwner)
+            Err(SolarError::InvalidOwner)
         } else if data.len() != size_of::<Mint>() || !is_valid_for_type::<Mint>(data) {
-            Err(SplReadError::InvalidData)
+            Err(SolarError::InvalidData)
         } else {
             Ok(Self { account })
         }
     }
 
-    pub fn wallet(&self, account: B) -> Result<WalletAccount<B>, SplReadError> {
+    pub fn wallet(&self, account: B) -> Result<WalletAccount<B>, SolarError> {
         let wallet = WalletAccount::<B>::any(account)?;
 
         if !pubkey_eq(wallet.mint, self.key()) {
-            Err(SplReadError::InvalidMint)
+            Err(SolarError::InvalidMint)
         } else {
             Ok(wallet)
         }
@@ -216,13 +211,13 @@ impl<B: AccountBackend> Deref for MintAccount<B> {
 }
 
 impl<B: AccountBackend> WalletAccount<B> {
-    pub fn any(account: B) -> Result<Self, SplReadError> {
+    pub fn any(account: B) -> Result<Self, SolarError> {
         let data = account.data();
 
         if !pubkey_eq(account.owner(), &*ID) {
-            Err(SplReadError::InvalidOwner)
+            Err(SolarError::InvalidOwner)
         } else if data.len() != size_of::<Wallet>() || !is_valid_for_type::<Wallet>(data) {
-            Err(SplReadError::InvalidData)
+            Err(SolarError::InvalidData)
         } else {
             Ok(Self { account })
         }
@@ -238,9 +233,9 @@ impl<B: AccountBackend> Deref for WalletAccount<B> {
 }
 
 impl<B: AccountBackend> TokenProgram<B> {
-    pub fn load(account: B) -> Result<Self, SplReadError> {
+    pub fn load(account: B) -> Result<Self, SolarError> {
         if !pubkey_eq(account.key(), &*ID) {
-            Err(SplReadError::InvalidOwner)
+            Err(SolarError::InvalidOwner)
         } else {
             Ok(Self { account })
         }
@@ -269,7 +264,7 @@ impl<T: AccountBackend> TokenProgram<T> {
         from: &mut WalletAccount<T>,
         to: &mut WalletAccount<T>,
         amount: u64,
-        authority: &T,
+        authority: &Authority<T>,
         seeds: &[&[&[u8]]],
     ) -> Result<Result<(), TokenError>, ProgramError>
     where
@@ -278,7 +273,7 @@ impl<T: AccountBackend> TokenProgram<T> {
         let mut invoker = crate::invoke::Invoker::<4>::new();
         invoker.push(from);
         invoker.push(to);
-        invoker.push_signed(authority);
+        invoker.push_signed(authority.account());
 
         Self::handle_result(invoker.invoke_signed(
             self.backend(),
@@ -482,12 +477,6 @@ impl TokenInstruction {
         }
 
         Ok(())
-    }
-}
-
-impl Loggable for SplReadError {
-    fn push_to_logger<const S: usize>(&self, logger: &mut crate::log::Logger<S>) {
-        logger.push_str(self.into())
     }
 }
 

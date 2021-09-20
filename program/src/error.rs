@@ -1,5 +1,5 @@
 use solana_api_types::program::ProgramError;
-use solar::spl::{SplReadError, TokenError};
+use solar::{error::SolarError, spl::TokenError};
 
 #[derive(IntoStaticStr, Debug, Display)]
 pub enum Error {
@@ -13,14 +13,8 @@ pub enum Error {
     InvalidAccount,
     NotRentExempt,
     Validation,
-    SplReadError(SplReadError),
     TokenError(TokenError),
-}
-
-impl From<SplReadError> for Error {
-    fn from(other: SplReadError) -> Self {
-        Self::SplReadError(other)
-    }
+    SolarError(SolarError),
 }
 
 impl From<TokenError> for Error {
@@ -32,5 +26,11 @@ impl From<TokenError> for Error {
 impl From<Error> for ProgramError {
     fn from(_: Error) -> Self {
         todo!()
+    }
+}
+
+impl From<SolarError> for Error {
+    fn from(other: SolarError) -> Self {
+        Self::SolarError(other)
     }
 }

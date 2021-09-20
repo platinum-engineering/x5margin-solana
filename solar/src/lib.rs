@@ -10,10 +10,12 @@
 extern crate strum;
 
 pub mod account;
+pub mod authority;
 pub mod collections;
 pub mod entity;
 #[cfg(feature = "onchain")]
 pub mod entrypoint;
+pub mod error;
 pub mod input;
 #[cfg(feature = "onchain")]
 pub mod invoke;
