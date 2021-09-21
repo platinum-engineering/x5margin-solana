@@ -1998,6 +1998,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
+name = "platinum-margin-tool-client"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "console_log",
+ "futures 0.3.16",
+ "js-sys",
+ "log",
+ "parity-scale-codec",
+ "reqwest",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "solana-api-types",
+ "solar",
+ "thiserror",
+ "token-locker",
+ "tokio 1.10.0",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "x5margin-program",
+]
+
+[[package]]
 name = "ppv-lite86"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3844,30 +3868,6 @@ name = "wasm-bindgen-shared"
 version = "0.2.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e0c4a743a309662d45f4ede961d7afa4ba4131a59a639f29b0069c3798bbcc2"
-
-[[package]]
-name = "wasm-client"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "console_log",
- "futures 0.3.16",
- "js-sys",
- "log",
- "parity-scale-codec",
- "reqwest",
- "serde",
- "serde_derive",
- "serde_json",
- "solana-api-types",
- "solar",
- "thiserror",
- "token-locker",
- "tokio 1.10.0",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "x5margin-program",
-]
 
 [[package]]
 name = "web-sys"
