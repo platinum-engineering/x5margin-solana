@@ -15,6 +15,13 @@ use crypto_imports::*;
 #[derive(Debug)]
 pub struct Keypair(ed25519_dalek::Keypair);
 
+#[cfg(feature = "crypto")]
+impl Clone for Keypair {
+    fn clone(&self) -> Self {
+        Self(ed25519_dalek::Keypair::from_bytes(&self.0.to_bytes()).unwrap())
+    }
+}
+
 /// The `Signer` trait declares operations that all digital signature providers
 /// must support. It is the primary interface by which signers are specified in
 /// `Transaction` signing interfaces

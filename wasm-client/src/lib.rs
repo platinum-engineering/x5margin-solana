@@ -15,8 +15,8 @@ use solana_api_types::{
     Account, AccountMeta, Client, ClientError, ClientErrorKind, EncodedConfirmedTransaction,
     Instruction, Pubkey, RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse,
     RpcSendTransactionConfig, RpcSignaturesForAddressConfig, RpcSimulateTransactionConfig,
-    RpcSimulateTransactionResult, Signature, SignatureInfo, Slot, Transaction, TransactionStatus,
-    UiAccount,
+    RpcSimulateTransactionResult, Signature, SignatureInfo, Signer, SignerError, Slot, Transaction,
+    TransactionStatus, UiAccount,
 };
 
 pub trait ResultExt<T> {

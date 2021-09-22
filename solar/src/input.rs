@@ -30,8 +30,8 @@ mod onchain {
 
     use solana_api_types::{entrypoint::MAX_PERMITTED_DATA_INCREASE, program::ProgramResult};
 
-    use crate::account::onchain::{Account, AccountRef};
     use super::*;
+    use crate::account::onchain::{Account, AccountRef};
 
     #[cfg(feature = "onchain")]
     pub struct BpfProgramInput {
@@ -233,6 +233,9 @@ pub fn wrapped_entrypoint<T: Entrypoint>(
     account_infos: &[solana_program::account_info::AccountInfo],
     data: &[u8],
 ) -> Result<(), solana_program::program_error::ProgramError> {
+    use std::mem::MaybeUninit;
+    use crate::account::onchain::Account;
+
     if account_infos.len() > MAX_ACCOUNTS {
         panic!("too many accounts");
     }
@@ -244,17 +247,19 @@ pub fn wrapped_entrypoint<T: Entrypoint>(
             let lamports = (&mut **lamports) as *mut u64;
             let data_len = info.data_len();
 
-            accounts_array[i].as_mut_ptr().write(Account {
-                key: info.key as *const _ as *const Pubkey,
-                lamports,
-                data_len,
-                data: info.data.borrow_mut().as_mut_ptr(),
-                owner: info.owner as *const _ as *const Pubkey,
-                rent_epoch: info.rent_epoch,
-                is_signer: info.is_signer,
-                is_writable: info.is_writable,
-                is_executable: info.executable,
-            })
+            accounts_array[i]
+                .as_mut_ptr()
+                .write(Account {
+                    key: info.key as *const _ as *const Pubkey,
+                    lamports,
+                    data_len,
+                    data: info.data.borrow_mut().as_mut_ptr(),
+                    owner: info.owner as *const _ as *const Pubkey,
+                    rent_epoch: info.rent_epoch,
+                    is_signer: info.is_signer,
+                    is_writable: info.is_writable,
+                    is_executable: info.executable,
+                })
         }
     }
 

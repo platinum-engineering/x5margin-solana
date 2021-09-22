@@ -38,7 +38,7 @@ pub use error::{ClientError, ClientErrorKind, RpcError};
 pub use hash::Hash;
 pub use instruction::{Instruction, InstructionError};
 pub use pubkey::Pubkey;
-pub use signature::Signature;
+pub use signature::{Signature, SignerError};
 pub use signers::Signers;
 pub use transaction::{Transaction, TransactionError, TransactionStatus};
 
@@ -116,6 +116,17 @@ impl AccountMeta {
             pubkey,
             is_signer,
             is_writable: false,
+        }
+    }
+}
+
+#[cfg(feature = "runtime-test")]
+impl From<solana_program::instruction::AccountMeta> for AccountMeta {
+    fn from(am: solana_program::instruction::AccountMeta) -> Self {
+        Self {
+            pubkey: am.pubkey.into(),
+            is_signer: am.is_signer,
+            is_writable: am.is_writable,
         }
     }
 }

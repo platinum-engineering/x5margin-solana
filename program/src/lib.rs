@@ -75,11 +75,13 @@ impl Entrypoint for Program {
 #[cfg(feature = "onchain")]
 #[cfg(test)]
 mod test {
+    use std::mem::size_of;
+
     use parity_scale_codec::Encode;
     use solana_program_test::builtin_process_instruction;
     use solar::{
         input::wrapped_entrypoint,
-        spl::{create_mint, create_wallet, mint_to},
+        spl::{create_mint, create_wallet, mint_to, Mint, Wallet},
         util::minimum_balance,
     };
 
@@ -218,13 +220,13 @@ mod test {
             &instrs,
             Some(&payer.pubkey()),
             &vec![
-                &payer,
-                &stake_mint_key,
-                &stake_vault_key,
-                &pool_key,
-                &aux_wallet_key,
-                &pool_administrator_key,
-                &staker_ticket_key,
+                payer,
+                stake_mint_key,
+                stake_vault_key,
+                pool_key.clone(),
+                aux_wallet_key,
+                pool_administrator_key,
+                staker_ticket_key.clone(),
             ],
             hash,
         );
@@ -244,13 +246,12 @@ mod test {
             .unwrap()
             .unwrap();
 
-        let stake_pool = StakePoolEntity::load(&program_id, &stake_pool).unwrap();
-        let staker_ticket = stake_pool.load_ticket(&staker_ticket).unwrap();
+        let stake_pool = StakePoolEntity::load(&program_id, Box::new(stake_pool)).unwrap();
+        let staker_ticket = stake_pool.load_ticket(Box::new(staker_ticket)).unwrap();
 
         assert!(stake_pool.stake_acquired_amount == 10000.into());
         assert!(stake_pool.stake_target_amount == 10000.into());
         assert!(staker_ticket.staked_amount == 10000.into());
-
         Ok(())
     }
 
@@ -282,8 +283,8 @@ mod test {
             );
 
             match pool_program_authority {
-                Ok(s) => break s,
-                Err(_) => {
+                Some(s) => break s,
+                None => {
                     salt += 1;
                 }
             }
@@ -319,20 +320,22 @@ mod test {
                 &program_id,
             ),
             spl_token::instruction::initialize_mint(
-                &solar::spl::ID,
-                &stake_mint_key.pubkey(),
-                &pool_administrator_key.pubkey(),
+                &solar::spl::ID.compat(),
+                &stake_mint_key.pubkey().compat(),
+                &pool_administrator_key.pubkey().compat(),
                 None,
                 6,
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
             spl_token::instruction::initialize_account(
-                &solar::spl::ID,
-                &stake_vault_key.pubkey(),
-                &stake_mint_key.pubkey(),
-                &pool_program_authority,
+                &solar::spl::ID.compat(),
+                &stake_vault_key.pubkey().compat(),
+                &stake_mint_key.pubkey().compat(),
+                &pool_program_authority.compat(),
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
             Instruction {
                 program_id,
                 accounts: vec![
@@ -349,7 +352,7 @@ mod test {
         let trx = Transaction::new_signed_with_payer(
             &instrs,
             Some(&payer.pubkey()),
-            &vec![&payer, &stake_mint_key, &stake_vault_key, &pool_key],
+            &vec![payer, stake_mint_key, stake_vault_key, pool_key],
             hash,
         );
 
@@ -387,8 +390,8 @@ mod test {
             );
 
             match pool_program_authority {
-                Ok(s) => break s,
-                Err(_) => {
+                Some(s) => break s,
+                None => {
                     salt += 1;
                 }
             }
@@ -424,20 +427,22 @@ mod test {
                 &program_id,
             ),
             spl_token::instruction::initialize_mint(
-                &solar::spl::ID,
-                &stake_mint_key.pubkey(),
-                &pool_administrator_key.pubkey(),
+                &solar::spl::ID.compat(),
+                &stake_mint_key.pubkey().compat(),
+                &pool_administrator_key.pubkey().compat(),
                 None,
                 6,
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
             spl_token::instruction::initialize_account(
-                &solar::spl::ID,
-                &stake_vault_key.pubkey(),
-                &stake_mint_key.pubkey(),
-                &pool_program_authority,
+                &solar::spl::ID.compat(),
+                &stake_vault_key.pubkey().compat(),
+                &stake_mint_key.pubkey().compat(),
+                &pool_program_authority.compat(),
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
             Instruction {
                 program_id,
                 accounts: vec![
@@ -454,7 +459,7 @@ mod test {
         let trx = Transaction::new_signed_with_payer(
             &instrs,
             Some(&payer.pubkey()),
-            &vec![&payer, &stake_mint_key, &stake_vault_key, &pool_key],
+            &vec![payer, stake_mint_key, stake_vault_key, pool_key],
             hash,
         );
 
@@ -465,7 +470,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn clim_reward_test() -> anyhow::Result<()> {
+    async fn claim_reward_test() -> anyhow::Result<()> {
         let mut program_test = ProgramTest::default();
         let program_id = Pubkey::new_unique();
 
@@ -492,8 +497,8 @@ mod test {
             );
 
             match pool_program_authority {
-                Ok(s) => break s,
-                Err(_) => {
+                Some(s) => break s,
+                None => {
                     salt += 1;
                 }
             }
@@ -527,20 +532,22 @@ mod test {
                 &program_id,
             ),
             spl_token::instruction::initialize_mint(
-                &solar::spl::ID,
-                &stake_mint_key.pubkey(),
-                &pool_administrator_key.pubkey(),
+                &solar::spl::ID.compat(),
+                &stake_mint_key.pubkey().compat(),
+                &pool_administrator_key.pubkey().compat(),
                 None,
                 6,
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
             spl_token::instruction::initialize_account(
-                &solar::spl::ID,
-                &stake_vault_key.pubkey(),
-                &stake_mint_key.pubkey(),
-                &pool_program_authority,
+                &solar::spl::ID.compat(),
+                &stake_vault_key.pubkey().compat(),
+                &stake_mint_key.pubkey().compat(),
+                &pool_program_authority.compat(),
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
             Instruction {
                 program_id,
                 accounts: vec![
@@ -557,7 +564,7 @@ mod test {
         let trx = Transaction::new_signed_with_payer(
             &instrs,
             Some(&payer.pubkey()),
-            &vec![&payer, &stake_mint_key, &stake_vault_key, &pool_key],
+            &vec![payer, stake_mint_key, stake_vault_key, pool_key],
             hash,
         );
 
@@ -595,8 +602,8 @@ mod test {
             );
 
             match pool_program_authority {
-                Ok(s) => break s,
-                Err(_) => {
+                Some(s) => break s,
+                None => {
                     salt += 1;
                 }
             }
@@ -632,20 +639,22 @@ mod test {
                 &program_id,
             ),
             spl_token::instruction::initialize_mint(
-                &solar::spl::ID,
-                &stake_mint_key.pubkey(),
-                &pool_administrator_key.pubkey(),
+                &solar::spl::ID.compat(),
+                &stake_mint_key.pubkey().compat(),
+                &pool_administrator_key.pubkey().compat(),
                 None,
                 6,
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
             spl_token::instruction::initialize_account(
-                &solar::spl::ID,
-                &stake_vault_key.pubkey(),
-                &stake_mint_key.pubkey(),
-                &pool_program_authority,
+                &solar::spl::ID.compat(),
+                &stake_vault_key.pubkey().compat(),
+                &stake_mint_key.pubkey().compat(),
+                &pool_program_authority.compat(),
             )
-            .unwrap(),
+            .unwrap()
+            .into(),
             Instruction {
                 program_id,
                 accounts: vec![
@@ -662,7 +671,7 @@ mod test {
         let trx = Transaction::new_signed_with_payer(
             &instrs,
             Some(&payer.pubkey()),
-            &vec![&payer, &stake_mint_key, &stake_vault_key, &pool_key],
+            &vec![payer, stake_mint_key, stake_vault_key, pool_key],
             hash,
         );
 
