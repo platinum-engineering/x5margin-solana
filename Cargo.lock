@@ -1999,9 +1999,10 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
 name = "platinum-margin-tool-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
+ "bs58 0.4.0",
  "console_log",
  "futures 0.3.16",
  "js-sys",
