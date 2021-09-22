@@ -13,11 +13,12 @@ use wasm_bindgen_futures::future_to_promise;
 
 use solana_api_types::{
     Account, AccountMeta, Client, ClientError, ClientErrorKind, EncodedConfirmedTransaction,
-    Instruction, Pubkey, RpcAccountInfoConfig, RpcError, RpcKeyedAccount, RpcResponse,
-    RpcSendTransactionConfig, RpcSignaturesForAddressConfig, RpcSimulateTransactionConfig,
-    RpcSimulateTransactionResult, Signature, SignatureInfo, Signer, SignerError, Slot, Transaction,
-    TransactionStatus, UiAccount,
+    Instruction, Memcmp, MemcmpEncodedBytes, Pubkey, RpcAccountInfoConfig, RpcError, RpcFilterType,
+    RpcKeyedAccount, RpcProgramAccountsConfig, RpcResponse, RpcSendTransactionConfig,
+    RpcSignaturesForAddressConfig, RpcSimulateTransactionConfig, RpcSimulateTransactionResult,
+    Signature, SignatureInfo, Slot, Transaction, TransactionStatus, UiAccount,
 };
+use x5margin_program::data::EntityKind;
 
 pub trait ResultExt<T> {
     fn into_js_value(self) -> Result<T, JsValue>;
@@ -574,6 +575,43 @@ pub struct RawPoolClient {
 }
 
 impl RawPoolClient {
+    async fn get_pools(&self, program: Pubkey) -> Result<Vec<StakePoolEntity>, ClientError> {
+        let accounts = self
+            .inner
+            .get_program_accounts(
+                program,
+                Some(RpcProgramAccountsConfig {
+                    filters: Some(vec![
+                        // header size up to kind
+                        RpcFilterType::DataSize(49),
+                        // skip all the parts that are not kind
+                        RpcFilterType::Memcmp(Memcmp {
+                            offset: 48,
+                            // and filter out pools only
+                            bytes: MemcmpEncodedBytes::Binary(
+                                bs58::encode([EntityKind::SimpleStakePool as u8]).into_string(),
+                            ),
+                            encoding: None,
+                        }),
+                    ]),
+                    account_config: RpcAccountInfoConfig::default(),
+                    with_context: None,
+                }),
+            )
+            .await?;
+
+        let mut pools = vec![];
+
+        for account in accounts.into_iter() {
+            let pool = StakePoolEntity::load(&program, Box::new(account))
+                .map_err(|err| ClientError::from(ClientErrorKind::Custom(err.to_string())))?;
+
+            pools.push(pool);
+        }
+
+        Ok(pools)
+    }
+
     async fn load_wallet_account(
         &self,
         pubkey: Pubkey,
@@ -627,10 +665,32 @@ impl RawPoolClient {
 #[wasm_bindgen]
 pub struct PoolClient {
     inner: RawPoolClient,
+    program: Pk,
 }
 
 #[wasm_bindgen]
 impl PoolClient {
+    pub fn new(client: ApiClient, program: Pk) -> Self {
+        Self {
+            inner: RawPoolClient {
+                inner: client.inner,
+            },
+            program,
+        }
+    }
+
+    pub fn get_pools(&self) -> Promise {
+        let client = self.inner.clone();
+        let program = self.program.to_pubkey();
+
+        let fut = async move {
+            let pools = client.get_pools(program).await?;
+            Ok(pools)
+        };
+
+        return_promise(fut)
+    }
+
     pub fn load_wallet_account(&self, pubkey: Pk, cfg: JsValue) -> Promise {
         let client = self.inner.clone();
 
@@ -659,11 +719,11 @@ impl PoolClient {
         return_promise(fut)
     }
 
-    pub fn load_stake_pool(&self, program: Pk, stake_pool: Pk) -> Promise {
+    pub fn load_stake_pool(&self, stake_pool: Pk) -> Promise {
         let client = self.inner.clone();
+        let program = self.program.to_pubkey();
 
         let fut = async move {
-            let program = program.to_pubkey();
             let stake_pool = stake_pool.to_pubkey();
             let stake_pool = client.load_stake_pool(program, stake_pool).await?;
             Ok(stake_pool)
@@ -1031,7 +1091,7 @@ impl LockerInstructionBuilder {
                 AccountMeta::new_readonly(self.administrator_key.to_pubkey(), false),
                 AccountMeta::new_readonly(self.locker.to_pubkey(), false),
                 AccountMeta::new(self.locker.to_pubkey(), false),
-                todo!(),
+                // TODO
             ],
             data: todo!(),
         }
