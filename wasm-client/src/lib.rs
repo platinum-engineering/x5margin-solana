@@ -670,6 +670,15 @@ pub struct PoolClient {
 
 #[wasm_bindgen]
 impl PoolClient {
+    pub fn new(client: ApiClient, program: Pk) -> Self {
+        Self {
+            inner: RawPoolClient {
+                inner: client.inner,
+            },
+            program,
+        }
+    }
+
     pub fn get_pools(&self) -> Promise {
         let client = self.inner.clone();
         let program = self.program.to_pubkey();
