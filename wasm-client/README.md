@@ -1,3 +1,16 @@
+## Использование
+
+```js
+let client = ApiClient.devnet();
+client.get_slot();
+
+let program_id = Pk.new("test-public-key");
+let pool_client = PoolClient.new(client, program);
+let pools = pool_client.get_pools();
+```
+
+## Локальная сборка и запуск тестового сервера
+
 1. Нужны nodejs, npm/yarn.
 
 2. wasm-pack
