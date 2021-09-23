@@ -8,6 +8,7 @@ use futures::{Future, TryFutureExt};
 use js_sys::Promise;
 use parity_scale_codec::Encode;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use solar::account::AccountFields;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
@@ -146,7 +147,7 @@ impl RawApiClient {
                 let body: JsonRpcResponse<T> = serde_json::from_value(body)?;
 
                 Ok(body.result)
-            },
+            }
             Err(err) => Err(ClientErrorKind::from(err).into()),
         }
     }
@@ -753,6 +754,7 @@ impl PoolClient {
 #[wasm_bindgen]
 pub struct StakePoolEntity {
     entity: x5margin_program::simple_stake::StakePoolEntity<Box<Account>>,
+    program: Pubkey,
 }
 
 impl Serialize for StakePoolEntity {
@@ -771,7 +773,10 @@ impl StakePoolEntity {
     ) -> Result<Self, x5margin_program::error::Error> {
         let stake_pool = x5margin_program::simple_stake::StakePoolEntity::load(program, pool)?;
 
-        Ok(Self { entity: stake_pool })
+        Ok(Self {
+            entity: stake_pool,
+            program: *program,
+        })
     }
 
     pub fn load_ticket(
@@ -781,6 +786,55 @@ impl StakePoolEntity {
         self.entity
             .load_ticket(ticket)
             .map(|entity| StakerTicketEntity { entity })
+    }
+}
+
+#[wasm_bindgen]
+impl StakePoolEntity {
+    pub fn stake(
+        &self,
+        amount: u64,
+        staker_key: Pk,
+        staker_ticket_key: Pk,
+        aux_wallet_key: Pk,
+    ) -> Instr {
+        Instruction {
+            program_id: self.program,
+            accounts: vec![
+                AccountMeta::new_readonly(*solar::spl::ID, false),
+                AccountMeta::new(*self.entity.account().key(), false),
+                AccountMeta::new_readonly(staker_key.to_pubkey(), false),
+                AccountMeta::new(staker_ticket_key.to_pubkey(), false),
+                AccountMeta::new(self.entity.stake_vault, false),
+                AccountMeta::new_readonly(self.entity.administrator_authority, true),
+                AccountMeta::new(aux_wallet_key.to_pubkey(), false),
+            ],
+            data: x5margin_program::Method::Simple(x5margin_program::simple_stake::Method::Stake {
+                amount: amount.into(),
+            })
+            .encode(),
+        }
+        .into()
+    }
+
+    pub fn unstake(&self, amount: u64) -> Instr {
+        Instruction {
+            program_id: self.program,
+            accounts: vec![
+                // TODO: what is administrator key?
+                AccountMeta::new_readonly(self.entity.administrator_authority, false),
+                AccountMeta::new(*self.entity.account().key(), false),
+                AccountMeta::new_readonly(self.entity.stake_mint, false),
+                AccountMeta::new_readonly(self.entity.stake_vault, false),
+            ],
+            data: x5margin_program::Method::Simple(
+                x5margin_program::simple_stake::Method::Unstake {
+                    amount: amount.into(),
+                },
+            )
+            .encode(),
+        }
+        .into()
     }
 }
 
@@ -879,7 +933,6 @@ pub struct ProgramAuthority {
     pk: Pk,
 }
 
-#[wasm_bindgen]
 impl ProgramAuthority {
     pub fn new(key: Pk, administrator_key: Pk, program_id: Pk) -> Self {
         let mut salt: u64 = 0;
@@ -979,52 +1032,6 @@ impl PoolInstructionBuilder {
                         target_amount: args.target_amount.into(),
                     },
                 ),
-            )
-            .encode(),
-        }
-        .into()
-    }
-
-    pub fn stake(
-        &self,
-        amount: u64,
-        staker_key: Pk,
-        staker_ticket_key: Pk,
-        aux_wallet_key: Pk,
-    ) -> Instr {
-        Instruction {
-            program_id: self.program_id.to_pubkey(),
-            accounts: vec![
-                AccountMeta::new_readonly(*solar::spl::ID, false),
-                AccountMeta::new(self.pool_key.to_pubkey(), false),
-                AccountMeta::new_readonly(staker_key.to_pubkey(), false),
-                AccountMeta::new(staker_ticket_key.to_pubkey(), false),
-                AccountMeta::new(self.stake_vault_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.administrator_key.to_pubkey(), true),
-                AccountMeta::new(aux_wallet_key.to_pubkey(), false),
-            ],
-            data: x5margin_program::Method::Simple(x5margin_program::simple_stake::Method::Stake {
-                amount: amount.into(),
-            })
-            .encode(),
-        }
-        .into()
-    }
-
-    pub fn unstake(&self, amount: u64) -> Instr {
-        Instruction {
-            program_id: self.program_id.to_pubkey(),
-            accounts: vec![
-                AccountMeta::new_readonly(self.administrator_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.authority.pk.to_pubkey(), false),
-                AccountMeta::new(self.pool_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.stake_mint_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.stake_vault_key.to_pubkey(), false),
-            ],
-            data: x5margin_program::Method::Simple(
-                x5margin_program::simple_stake::Method::Unstake {
-                    amount: amount.into(),
-                },
             )
             .encode(),
         }
