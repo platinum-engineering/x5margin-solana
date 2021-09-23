@@ -138,12 +138,17 @@ impl RawApiClient {
             .send()
             .await?;
 
-        let body = r.bytes().await?;
-        let body: serde_json::Value = serde_json::from_slice(&body)?;
-        log::info!("{}", body);
-        let body: JsonRpcResponse<T> = serde_json::from_value(body)?;
+        match r.error_for_status() {
+            Ok(r) => {
+                let body = r.bytes().await?;
+                let body: serde_json::Value = serde_json::from_slice(&body)?;
+                log::info!("{}", body);
+                let body: JsonRpcResponse<T> = serde_json::from_value(body)?;
 
-        Ok(body.result)
+                Ok(body.result)
+            },
+            Err(err) => Err(ClientErrorKind::from(err).into()),
+        }
     }
 }
 
