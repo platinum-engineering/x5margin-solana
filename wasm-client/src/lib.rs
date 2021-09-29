@@ -15,9 +15,10 @@ use wasm_bindgen_futures::future_to_promise;
 use solana_api_types::{
     Account, AccountMeta, Client, ClientError, ClientErrorKind, EncodedConfirmedTransaction,
     Instruction, Memcmp, MemcmpEncodedBytes, Pubkey, RpcAccountInfoConfig, RpcError, RpcFilterType,
-    RpcKeyedAccount, RpcProgramAccountsConfig, RpcResponse, RpcSendTransactionConfig,
-    RpcSignaturesForAddressConfig, RpcSimulateTransactionConfig, RpcSimulateTransactionResult,
-    Signature, SignatureInfo, Signer, Slot, Transaction, TransactionStatus, UiAccount,
+    RpcKeyedAccount, RpcProgramAccountsConfig, RpcRecentBlockhash, RpcResponse,
+    RpcSendTransactionConfig, RpcSignaturesForAddressConfig, RpcSimulateTransactionConfig,
+    RpcSimulateTransactionResult, Signature, SignatureInfo, Signer, Slot, Transaction,
+    TransactionStatus, UiAccount,
 };
 use x5margin_program::data::EntityKind;
 
@@ -356,6 +357,20 @@ impl Client for RawApiClient {
 
         Ok(r.value)
     }
+
+    async fn get_recent_blockhash(
+        &self,
+        commitment: Option<solana_api_types::CommitmentConfig>,
+    ) -> Result<solana_api_types::RpcRecentBlockhash, ClientError> {
+        let r: RpcResponse<RpcRecentBlockhash> = self
+            .mk_request(Request {
+                method: "getRecentBlockhash",
+                params: serde_json::json!([serde_json::to_value(&commitment)?]),
+            })
+            .await?;
+
+        Ok(r.value)
+    }
 }
 
 fn return_promise<T>(fut: impl Future<Output = Result<T, ClientError>> + 'static) -> Promise
@@ -530,6 +545,19 @@ impl ApiClient {
             let r = client
                 .simulate_transaction(transaction.as_ref(), cfg)
                 .await?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn get_recent_blockhash(&self, commitment: JsValue) -> Promise {
+        let client = self.inner.clone();
+
+        let fut = async move {
+            let commitment = commitment.into_serde()?;
+            let r = client.get_recent_blockhash(commitment).await?;
 
             Ok(r)
         };
@@ -930,12 +958,19 @@ impl Instructions {
         Self { inner: vec![] }
     }
 
-    pub fn push(&mut self, i: Instr) {
+    pub fn add(&mut self, i: Instr) {
         self.inner.push(i.0);
     }
 
-    pub fn append(&mut self, mut is: Instructions) {
+    pub fn merge(&mut self, mut is: Instructions) {
         self.inner.append(&mut is.inner);
+    }
+
+    pub fn to_transaction(&self, payer: Pk) -> Tx {
+        Tx(solana_api_types::Transaction::new_with_payer(
+            &self.inner,
+            Some(&payer.to_pubkey()),
+        ))
     }
 }
 
@@ -1156,22 +1191,6 @@ impl AsRef<solana_api_types::Transaction> for Tx {
     fn as_ref(&self) -> &solana_api_types::Transaction {
         &self.0
     }
-}
-
-#[wasm_bindgen]
-pub fn transaction_signed_with_payer(
-    instructions: Instructions,
-    payer: Pk,
-    signers: &Signers,
-    recent_blockhash: Hash,
-) -> Tx {
-    Transaction::new_signed_with_payer(
-        instructions.as_ref(),
-        Some(payer.as_ref()),
-        &signers.0,
-        recent_blockhash.into_inner(),
-    )
-    .into()
 }
 
 #[wasm_bindgen]

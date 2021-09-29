@@ -21,29 +21,46 @@ pool.rewards_remaining(); // текущий размер наград в пул�
 pool.start_date(); // дата создания пула (unix timestamp в секундах)
 pool.end_date(); // дата окончания работы пула (unix timestamp в секундах)
 
-let stake_instruction = pool.stake(
-    1000,
-    staker_key,
-    staker_ticket_key,
-    aux_wallet_key
-);
-
-let payer = Pk.new("payer-public-key");
-
 let instructions = Instructions.new();
-instructions.push(stake_instruction);
 
-let tx = transaction_signed_with_payer(
-    instructions,
-    payer,
-    signers,
-    recent_blockhash
+instructions.add(
+    // Добавляем монеты в пул.
+    pool.stake(
+          10000 // количество монет
+        , staker_key
+        , staker_ticket_key
+        , aux_wallet_key
+    )
 );
-client
-    .send_transaction(tx)
-    .and_then(tx_signature =>
-        console.log(tx_signature);
-    );
+
+instructions.add(
+    // Забираем монеты из пула.
+    pool.unstake(
+          1000 // количество монет
+    )
+);
+
+instructions.add(
+    // Забираем награду из пула.
+    pool.claim_reward()
+);
+
+// Нужно интегрироваться с кошельком -- подключить провайдера
+// пользовательских данных, который позволит подписывать транзакции
+// от имени пользователя.
+// https://github.com/solana-labs/wallet-adapter/ -- список кошельков
+// и адаптеров к ним.
+let tx = instructions.to_transaction(provider.publicKey);
+tx.feePayer = provider.publicKey;
+
+const anyTx = tx;
+anyTx.recentBlockhash = (
+    await client.get_recent_blockhash()
+).blockhash;
+
+let signed = await provider.signTransaction(anyTx);
+let signature = await connection.sendRawTransaction(signed.serialize());
+await connection.confirmTransaction(signature);
 ```
 
 ## Локальная сборка и запуск тестового сервера
