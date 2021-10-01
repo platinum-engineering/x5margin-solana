@@ -6,13 +6,15 @@ version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+# wasm = ["reqwest/js"]
+
 [dependencies]
 async-trait = "0.1.50"
 bs58 = "0.4.0"
-reqwest = {version = "0.11.4", features = ["json"]}
+reqwest = { version = "0.11.4", features = ["json"] }
 serde = "1.0.126"
 serde_json = "1.0.64"
-solana-sdk = "1.7.2"
-tokio = {version = "1.7.1", features = ["full"]}
-
 solana-api-types = {path = "../solana-api-types"}
+async-std = { version = "1.10", features = ["unstable"] }
+log = "0.4"

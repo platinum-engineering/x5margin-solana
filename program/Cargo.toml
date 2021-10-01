@@ -28,7 +28,8 @@ anyhow = "1"
 solana-program = "= 1.7.2"
 solana-program-test = "= 1.7.2"
 solana-sdk = "= 1.7.2"
-tokio = "1.8"
+async-std = "1.10"
+
 
 solana-api-types = {path = "../solana-api-types", features = ["crypto", "runtime-test"]}
 solar = {path = "../solar", features = ["runtime-test"]}

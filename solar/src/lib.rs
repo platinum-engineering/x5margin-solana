@@ -13,12 +13,8 @@ pub mod account;
 pub mod authority;
 pub mod collections;
 pub mod entity;
-#[cfg(feature = "onchain")]
-pub mod entrypoint;
 pub mod error;
 pub mod input;
-#[cfg(feature = "onchain")]
-pub mod invoke;
 pub mod log;
 pub mod math;
 pub mod mem;
@@ -27,6 +23,16 @@ pub mod spl;
 pub mod time;
 pub mod util;
 
+#[cfg(feature = "onchain")]
+pub mod entrypoint;
+#[cfg(feature = "onchain")]
+pub mod invoke;
+
 pub mod prelude {
     pub use crate::account::AccountBackend;
+}
+
+#[cfg(feature = "offchain")]
+pub mod offchain {
+    pub mod client;
 }

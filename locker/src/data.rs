@@ -2,9 +2,9 @@ use std::mem::size_of;
 
 use solana_api_types::Pubkey;
 use solar::{
-    account::{AccountBackend, AccountFieldsMut},
+    account::{pubkey::PubkeyAccount, AccountBackend, AccountFields, AccountFieldsMut},
     entity::{AccountType, EntityBase, EntitySchema},
-    reinterpret::{self, reinterpret_mut_unchecked, reinterpret_unchecked},
+    reinterpret::{reinterpret_mut_unchecked, reinterpret_unchecked},
     time::SolTimestamp,
     util::is_zeroed,
 };
@@ -82,6 +82,10 @@ impl<B: AccountBackend> TokenLock<B> {
         &self.account.account
     }
 
+    pub fn key(&self) -> &Pubkey {
+        self.account.account.key()
+    }
+
     pub fn is_blank(&self) -> bool {
         is_zeroed(self.account.body())
     }
@@ -95,5 +99,13 @@ impl<B: AccountBackend> TokenLock<B> {
         B::Impl: AccountFieldsMut,
     {
         unsafe { reinterpret_mut_unchecked(self.account.body_mut()) }
+    }
+}
+
+impl From<Pubkey> for TokenLock<PubkeyAccount> {
+    fn from(pubkey: Pubkey) -> Self {
+        Self {
+            account: pubkey.into(),
+        }
     }
 }

@@ -1,4 +1,4 @@
-#![feature(min_const_generics)]
+#![cfg_attr(target_arch = "bpf", feature(min_const_generics))]
 
 use std::fmt;
 
@@ -8,20 +8,20 @@ use serde_json::Value;
 use serde::{Deserialize, Serialize};
 
 pub mod entrypoint;
-mod error;
-mod faucet;
-mod hash;
-mod instruction;
-mod message;
+pub mod error;
+pub mod faucet;
+pub mod hash;
+pub mod instruction;
+pub mod message;
 pub mod program;
-mod pubkey;
-mod short_vec;
-mod signature;
-mod signers;
+pub mod pubkey;
+pub mod short_vec;
+pub mod signature;
+pub mod signers;
 pub mod syscalls;
 pub mod system;
 pub mod sysvar;
-mod transaction;
+pub mod transaction;
 
 #[cfg(feature = "runtime-test")]
 pub mod program_test;
@@ -270,7 +270,7 @@ pub enum UiAccountEncoding {
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub enum UiTransactionEncoding {
+pub enum TransactionEncoding {
     Binary, // Legacy. Retained for RPC backwards compatibility
     Base64,
     Base58,
@@ -278,13 +278,13 @@ pub enum UiTransactionEncoding {
     JsonParsed,
 }
 
-impl Default for UiTransactionEncoding {
+impl Default for TransactionEncoding {
     fn default() -> Self {
-        UiTransactionEncoding::Base64
+        TransactionEncoding::Base64
     }
 }
 
-impl fmt::Display for UiTransactionEncoding {
+impl fmt::Display for TransactionEncoding {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let v = serde_json::to_value(self).map_err(|_| fmt::Error)?;
         let s = v.as_str().ok_or(fmt::Error)?;
@@ -390,7 +390,7 @@ pub struct RpcSlotConfig {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RpcTransactionConfig {
-    pub encoding: Option<UiTransactionEncoding>,
+    pub encoding: Option<TransactionEncoding>,
     #[serde(flatten)]
     pub commitment: Option<CommitmentConfig>,
 }
@@ -484,7 +484,7 @@ pub struct UiTransaction {
 #[serde(rename_all = "camelCase", untagged)]
 pub enum EncodedTransaction {
     LegacyBinary(String), // Old way of expressing base-58, retained for RPC backwards compatibility
-    Binary(String, UiTransactionEncoding),
+    Binary(String, TransactionEncoding),
     Json(UiTransaction),
 }
 
@@ -574,7 +574,7 @@ pub struct RpcSendTransactionConfig {
     #[serde(default)]
     pub skip_preflight: bool,
     pub preflight_commitment: Option<CommitmentLevel>,
-    pub encoding: Option<UiTransactionEncoding>,
+    pub encoding: Option<TransactionEncoding>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -593,7 +593,7 @@ pub struct RpcSimulateTransactionConfig {
     pub replace_recent_blockhash: bool,
     #[serde(flatten)]
     pub commitment: Option<CommitmentConfig>,
-    pub encoding: Option<UiTransactionEncoding>,
+    pub encoding: Option<TransactionEncoding>,
     pub accounts: Option<RpcSimulateTransactionAccountsConfig>,
 }
 
@@ -618,52 +618,50 @@ pub struct RpcResponse<T> {
 
 #[async_trait(?Send)]
 pub trait Client {
-    /// https://docs.solana.com/developing/clients/jsonrpc-api#getaccountinfo
+    fn default_commitment_level(&self) -> CommitmentLevel;
+
+    fn set_default_commitment_level(&self, level: CommitmentLevel);
+
     async fn get_account_info(
         &self,
         account: Pubkey,
         cfg: Option<RpcAccountInfoConfig>,
     ) -> Result<Account, ClientError>;
 
-    /// https://docs.solana.com/developing/clients/jsonrpc-api#getprogramaccounts
     async fn get_program_accounts(
         &self,
         program: Pubkey,
         cfg: Option<RpcProgramAccountsConfig>,
     ) -> Result<Vec<Account>, ClientError>;
 
-    /// https://docs.solana.com/developing/clients/jsonrpc-api#getmultipleaccounts
     async fn get_multiple_accounts(
         &self,
         accounts: &[Pubkey],
         cfg: Option<RpcAccountInfoConfig>,
     ) -> Result<Vec<Account>, ClientError>;
 
-    /// https://docs.solana.com/developing/clients/jsonrpc-api#getsignaturestatuses
     async fn get_signature_statuses(
         &self,
         signatures: &[Signature],
         cfg: Option<RpcSignatureStatusConfig>,
     ) -> Result<Vec<Option<TransactionStatus>>, ClientError>;
 
-    /// https://docs.solana.com/developing/clients/jsonrpc-api#getsignaturesforaddress
     async fn get_signatures_for_address(
         &self,
         address: &Pubkey,
         cfg: Option<RpcSignaturesForAddressConfig>,
     ) -> Result<Vec<SignatureInfo>, ClientError>;
 
-    /// https://docs.solana.com/developing/clients/jsonrpc-api#getslot
     async fn get_slot(&self, cfg: Option<RpcSlotConfig>) -> Result<Slot, ClientError>;
 
-    /// https://docs.solana.com/developing/clients/jsonrpc-api#gettransaction
     async fn get_transaction(
         &self,
         signature: Signature,
         cfg: Option<RpcTransactionConfig>,
     ) -> Result<Option<EncodedConfirmedTransaction>, ClientError>;
 
-    /// https://docs.solana.com/developing/clients/jsonrpc-api#requestairdrop
+    async fn get_recent_blockhash(&self) -> Result<Hash, ClientError>;
+
     async fn request_airdrop(
         &self,
         pubkey: &Pubkey,
@@ -671,17 +669,23 @@ pub trait Client {
         commitment: Option<CommitmentConfig>,
     ) -> Result<Signature, ClientError>;
 
-    /// https://docs.solana.com/developing/clients/jsonrpc-api#sendtransaction
-    async fn send_transaction(
+    async fn send_transaction(&self, transaction: &Transaction) -> Result<Signature, ClientError> {
+        self.send_transaction_ex(transaction, false, self.default_commitment_level())
+            .await
+    }
+
+    async fn send_transaction_ex(
         &self,
         transaction: &Transaction,
-        cfg: RpcSendTransactionConfig,
+        skip_preflight: bool,
+        preflight_commitment: CommitmentLevel,
     ) -> Result<Signature, ClientError>;
 
-    /// https://docs.solana.com/developing/clients/jsonrpc-api#simulatetransaction
     async fn simulate_transaction(
         &self,
         transaction: &Transaction,
-        cfg: RpcSimulateTransactionConfig,
+        sig_verify: bool,
+        commitment: CommitmentLevel,
+        replace_recent_blockhash: bool,
     ) -> Result<RpcSimulateTransactionResult, ClientError>;
 }

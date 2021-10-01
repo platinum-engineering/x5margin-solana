@@ -18,7 +18,8 @@ crypto = [
 rpc = [
   "reqwest",
   "ruzstd",
-  "serde-big-array"
+  "serde-big-array",
+  "wasm-bindgen"
 ]
 # Enables extended functionality that might not be available under non-x86 targets, such as WASM or BPF
 default = ["crypto", "rpc"]
@@ -52,7 +53,7 @@ thiserror = "1.0"
 # zstd не билдится под wasm, поэтому нашел реализацию декодера на чистом расте.
 # zstd = {version = "0.5", features = ["wasm"]}
 ruzstd = {version = "0.2", optional = true}
-wasm-bindgen = "0.2"
+wasm-bindgen = {version = "0.2", optional = true}
 
 solar-macros = {path = "../solar-macros"}
 

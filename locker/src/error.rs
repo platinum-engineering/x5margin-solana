@@ -43,7 +43,7 @@ impl From<EntityError> for Error {
 }
 
 impl Loggable for Error {
-    fn push_to_logger<const S: usize>(&self, logger: &mut solar::log::Logger<S>) {
+    fn push_to_logger<const S: usize>(&self, _logger: &mut solar::log::Logger<S>) {
         // TODO
     }
 }

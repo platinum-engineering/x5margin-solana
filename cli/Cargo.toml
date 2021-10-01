@@ -9,6 +9,6 @@ x5margin-program = { path = "../program" }
 solana-api-types = { path = "../solana-api-types" }
 solana-rpc-client = { path = "../jsonrpc-client" }
 
-tokio = { version = "1.7.1", features = ["full"] }
+async-std = "1.10"
 
 [dev-dependencies]

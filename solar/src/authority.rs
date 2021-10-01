@@ -1,10 +1,22 @@
 use solana_api_types::Pubkey;
 
-use crate::{account::AccountFields, error::SolarError, prelude::AccountBackend};
+use crate::{
+    account::{pubkey::PubkeyAccount, AccountFields},
+    error::SolarError,
+    prelude::AccountBackend,
+};
 
 #[derive(Debug)]
 pub struct Authority<B: AccountBackend> {
     account: B,
+}
+
+impl From<Pubkey> for Authority<PubkeyAccount> {
+    fn from(pubkey: Pubkey) -> Self {
+        Self {
+            account: pubkey.into(),
+        }
+    }
 }
 
 impl<B: AccountBackend> Authority<B> {

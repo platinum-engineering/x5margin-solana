@@ -1,11 +1,17 @@
 use quote::quote;
 use syn::{parse_macro_input, LitStr};
 
+mod account_schema;
 mod parse_accounts;
 
 #[proc_macro]
 pub fn parse_accounts(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     parse_accounts::parse_accounts(input)
+}
+
+#[proc_macro]
+pub fn account_schema(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    account_schema::account_schema(input)
 }
 
 #[proc_macro]

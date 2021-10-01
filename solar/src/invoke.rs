@@ -71,15 +71,14 @@ unsafe fn sol_invoke_signed_c(
         slice::{from_raw_parts, from_raw_parts_mut},
     };
 
-    use solana_program::{account_info::AccountInfo, instruction::AccountMeta};
-
     #[cfg(not(feature = "runtime-test"))]
     {
-        unimplemented!()
+        unimplemented!("runtime-test feature is incompatible with bpf target")
     }
 
     #[cfg(feature = "runtime-test")]
     {
+        use solana_program::{account_info::AccountInfo, instruction::AccountMeta};
         let accounts = from_raw_parts(account_infos_addr, account_infos_len as usize);
         let signers = from_raw_parts(signers_seeds_addr, signers_seeds_len as usize);
 

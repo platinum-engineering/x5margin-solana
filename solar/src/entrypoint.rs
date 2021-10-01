@@ -2,6 +2,8 @@ use std::{alloc::Layout, mem::size_of, ptr::null_mut};
 
 use solana_api_types::entrypoint::{HEAP_LENGTH, HEAP_START_ADDRESS};
 
+pub const SUCCESS: u64 = 0;
+
 #[inline(always)]
 pub fn panic_handler(_: &core::panic::PanicInfo) {
     // msg!("{}", info);
@@ -47,7 +49,7 @@ macro_rules! entrypoint {
             let input =
                 unsafe { $crate::input::BpfProgramInput::deserialize_from_bpf_entrypoint(input) };
             match $process_instruction(input) {
-                Ok(()) => solana_program::entrypoint::SUCCESS,
+                Ok(()) => $crate::entrypoint::SUCCESS,
                 Err(error) => error.into(),
             }
         }

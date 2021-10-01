@@ -42,7 +42,7 @@ macro_rules! default_keypairs_impl {
     };
 }
 
-impl<T: Signer> Signers for [&T] {
+impl<T: Signer> Signers for [T] {
     default_keypairs_impl!();
 }
 
@@ -54,38 +54,28 @@ impl Signers for Vec<Box<dyn Signer>> {
     default_keypairs_impl!();
 }
 
-impl Signers for Vec<&dyn Signer> {
-    default_keypairs_impl!();
-}
-
-impl Signers for [&dyn Signer] {
-    default_keypairs_impl!();
-}
-
-impl Signers for [&dyn Signer; 0] {
-    default_keypairs_impl!();
-}
-
-impl Signers for [&dyn Signer; 1] {
-    default_keypairs_impl!();
-}
-
-impl Signers for [&dyn Signer; 2] {
-    default_keypairs_impl!();
-}
-
-impl Signers for [&dyn Signer; 3] {
-    default_keypairs_impl!();
-}
-
-impl Signers for [&dyn Signer; 4] {
-    default_keypairs_impl!();
-}
-
 impl<T: Signer, const N: usize> Signers for [T; N] {
     default_keypairs_impl!();
 }
 
 impl<T: Signer> Signers for Vec<T> {
     default_keypairs_impl!();
+}
+
+impl<T: Signers> Signers for &T {
+    fn pubkeys(&self) -> Vec<Pubkey> {
+        <T as Signers>::pubkeys(self)
+    }
+
+    fn try_pubkeys(&self) -> Result<Vec<Pubkey>, SignerError> {
+        <T as Signers>::try_pubkeys(self)
+    }
+
+    fn sign_message(&self, message: &[u8]) -> Vec<Signature> {
+        <T as Signers>::sign_message(self, message)
+    }
+
+    fn try_sign_message(&self, message: &[u8]) -> Result<Vec<Signature>, SignerError> {
+        <T as Signers>::try_sign_message(self, message)
+    }
 }

@@ -97,20 +97,20 @@ impl Signer for Keypair {
 }
 
 #[cfg(feature = "crypto")]
-impl<T: AsRef<Keypair>> Signer for T {
+impl Signer for &Keypair {
     fn pubkey(&self) -> Pubkey {
-        self.as_ref().pubkey()
+        Pubkey::new(self.0.public.as_ref().try_into().expect("infallible"))
     }
 
     fn try_pubkey(&self) -> Result<Pubkey, SignerError> {
-        self.as_ref().try_pubkey()
+        Ok(self.pubkey())
     }
 
     fn sign_message(&self, message: &[u8]) -> Signature {
-        self.as_ref().sign_message(message)
+        Signature::new(self.0.sign(message).to_bytes())
     }
 
     fn try_sign_message(&self, message: &[u8]) -> Result<Signature, SignerError> {
-        self.as_ref().try_sign_message(message)
+        Ok(self.sign_message(message))
     }
 }

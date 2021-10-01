@@ -5,7 +5,7 @@ use solana_api_types::program::ProgramError;
 use solana_api_types::{system::create_account, sysvar, AccountMeta, Instruction, Pubkey};
 
 use crate::{
-    account::{AccountBackend, AccountFields},
+    account::{pubkey::PubkeyAccount, AccountBackend, AccountFields},
     authority::Authority,
     collections::StaticVec,
     error::SolarError,
@@ -280,6 +280,30 @@ impl<T: AccountBackend> TokenProgram<T> {
             &TokenInstruction::Transfer { amount }.pack_static_vec(),
             seeds,
         ))
+    }
+}
+
+impl From<Pubkey> for TokenProgram<PubkeyAccount> {
+    fn from(pubkey: Pubkey) -> Self {
+        Self {
+            account: pubkey.into(),
+        }
+    }
+}
+
+impl From<Pubkey> for WalletAccount<PubkeyAccount> {
+    fn from(pubkey: Pubkey) -> Self {
+        Self {
+            account: pubkey.into(),
+        }
+    }
+}
+
+impl From<Pubkey> for MintAccount<PubkeyAccount> {
+    fn from(pubkey: Pubkey) -> Self {
+        Self {
+            account: pubkey.into(),
+        }
     }
 }
 

@@ -22,6 +22,12 @@ pub struct PubkeyAccount {
     pubkey: Pubkey,
 }
 
+impl From<Pubkey> for PubkeyAccount {
+    fn from(pubkey: Pubkey) -> Self {
+        Self { pubkey }
+    }
+}
+
 impl AccountFields for Pubkey {
     fn key(&self) -> &Pubkey {
         self

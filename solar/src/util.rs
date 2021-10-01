@@ -1,6 +1,5 @@
 use std::{borrow::Borrow, mem::size_of};
 
-use chrono::{DateTime, TimeZone, Utc};
 use fixed::{traits::ToFixed, types::U64F64};
 
 use solana_api_types::{
@@ -222,10 +221,6 @@ pub fn sol_timestamp_now() -> SolTimestamp {
     Clock::get().bpf_unwrap().unix_timestamp.into()
 }
 
-pub fn datetime_now() -> DateTime<Utc> {
-    Utc.timestamp(timestamp_now().value(), 0)
-}
-
 pub fn minimum_balance(size: u64) -> u64 {
     pub const ACCOUNT_STORAGE_OVERHEAD: u64 = 128;
     let rent = Rent::default();
@@ -245,4 +240,34 @@ pub fn is_rent_exempt_fixed_arithmetic(rent: &Rent, lamports: u64, size: u64) ->
     let minimum_balance: u64 = (exemption_threshold * per_year_cost).to_num::<u64>();
 
     lamports >= minimum_balance
+}
+
+#[inline(never)]
+pub fn log_not_enough_accounts(name: &str, len: usize) {
+    qlog!(
+        "cannot load `",
+        name,
+        "` because there are not enough accounts (len = ",
+        len,
+        ")"
+    );
+}
+
+#[inline(never)]
+pub fn log_not_writable_account(name: &str, len: usize) {
+    qlog!(
+        "cannot load `",
+        name,
+        "` because it is read-only, but expected writable (len = ",
+        len,
+        ")"
+    );
+}
+
+#[macro_export]
+macro_rules! load_schema {
+    ($input:ident => $schema:ident) => {
+        let mut parsed = $schema::from_program_input($input)?;
+        parsed.borrow()
+    };
 }

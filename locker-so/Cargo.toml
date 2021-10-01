@@ -1,19 +1,17 @@
 [package]
 edition = "2018"
-name = "x5margin-program-so"
+name = "token-locker-so"
 version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 solar = {path = "../solar", features = ["onchain"]}
-x5margin-program = {path = "../program", features = ["onchain"]}
-
-solana-program = "= 1.7.2"
+token-locker = {path = "../locker", features = ["onchain"]}
 
 [lib]
 crate-type = ["cdylib"]
-name = "x5margin"
+name = "locker"
 
 [profile.release]
 lto = true

@@ -227,8 +227,8 @@ mod onchain {
     }
 }
 
-#[cfg(feature = "runtime-test")]
-pub fn wrapped_entrypoint<T: Entrypoint>(
+#[cfg(all(feature = "runtime-test", feature = "onchain"))]
+pub fn wrapped_entrypoint<T: onchain::Entrypoint>(
     program_id: &solana_program::pubkey::Pubkey,
     account_infos: &[solana_program::account_info::AccountInfo],
     data: &[u8],

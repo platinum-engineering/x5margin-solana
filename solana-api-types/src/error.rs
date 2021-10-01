@@ -1,4 +1,6 @@
 use thiserror::Error;
+
+#[cfg(feature = "rpc")]
 use wasm_bindgen::JsValue;
 
 use crate::{
@@ -260,9 +262,10 @@ impl From<ParseSignatureError> for ClientError {
     }
 }
 
-impl Into<JsValue> for ClientError {
-    fn into(self) -> JsValue {
-        let s = self.to_string();
+#[cfg(feature = "rpc")]
+impl From<ClientError> for JsValue {
+    fn from(other: ClientError) -> Self {
+        let s = other.to_string();
         JsValue::from_str(s.as_str())
     }
 }

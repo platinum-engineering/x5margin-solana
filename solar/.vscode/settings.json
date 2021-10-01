@@ -1,0 +1,7 @@
+{
+    "rust-analyzer.cargo.features": [
+        "native",
+        "onchain",
+        "offchain"
+    ]
+}

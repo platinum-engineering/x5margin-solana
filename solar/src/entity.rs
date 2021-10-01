@@ -6,7 +6,7 @@ use solana_api_types::{
 };
 
 use crate::{
-    account::{AccountFields, AccountFieldsMut, Environment},
+    account::{pubkey::PubkeyAccount, AccountFields, AccountFieldsMut, Environment},
     prelude::AccountBackend,
     reinterpret::{reinterpret_mut_unchecked, reinterpret_unchecked},
     util::{is_rent_exempt_fixed_arithmetic, minimum_balance, ResultExt},
@@ -46,6 +46,15 @@ pub trait AccountType {
 pub struct EntityBase<B: AccountBackend, T: AccountType> {
     pub account: B,
     _phantom: PhantomData<T>,
+}
+
+impl<T: AccountType> From<Pubkey> for EntityBase<PubkeyAccount, T> {
+    fn from(pubkey: Pubkey) -> Self {
+        Self {
+            account: pubkey.into(),
+            _phantom: Default::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

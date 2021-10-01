@@ -67,15 +67,11 @@ impl<T: CheckedNum> ToChecked for T {
     PartialOrd,
     Eq,
     Ord,
-    minicbor::Encode,
-    minicbor::Decode,
     parity_scale_codec::Encode,
     parity_scale_codec::Decode,
 )]
 #[repr(transparent)]
-#[cbor(transparent)]
 pub struct Checked<T: CheckedNum> {
-    #[n(0)]
     inner: T,
 }
 

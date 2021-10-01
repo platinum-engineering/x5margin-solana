@@ -3,8 +3,7 @@ use thiserror::Error;
 
 use crate::{
     error::ClientErrorKind, short_vec, signature::SignerError, ClientError, CompiledInstruction,
-    Instruction, InstructionError, Message, Pubkey, Signature, Signers, Slot,
-    UiTransactionEncoding,
+    Instruction, InstructionError, Message, Pubkey, Signature, Signers, Slot, TransactionEncoding,
 };
 
 use super::Hash;
@@ -124,14 +123,14 @@ pub struct Transaction {
 impl Transaction {
     pub fn encode(
         &self,
-        encoding: UiTransactionEncoding,
+        encoding: TransactionEncoding,
     ) -> std::result::Result<String, ClientError> {
         let serialized = bincode::serialize(self).map_err(|e| {
             ClientErrorKind::Custom(format!("transaction serialization failed: {}", e))
         })?;
         let encoded = match encoding {
-            UiTransactionEncoding::Base58 => bs58::encode(serialized).into_string(),
-            UiTransactionEncoding::Base64 => base64::encode(serialized),
+            TransactionEncoding::Base58 => bs58::encode(serialized).into_string(),
+            TransactionEncoding::Base64 => base64::encode(serialized),
             _ => {
                 return Err(ClientErrorKind::Custom(format!(
                     "unsupported transaction encoding: {}. Supported encodings: base58, base64",
@@ -179,7 +178,7 @@ impl Transaction {
     pub fn new_signed_with_payer<T: Signers>(
         instructions: &[Instruction],
         payer: Option<&Pubkey>,
-        signing_keypairs: &T,
+        signing_keypairs: T,
         recent_blockhash: Hash,
     ) -> Self {
         let message = Message::new(instructions, payer);
@@ -192,7 +191,7 @@ impl Transaction {
     ///
     /// Panics when signing fails.
     pub fn new<T: Signers>(
-        from_keypairs: &T,
+        from_keypairs: T,
         message: Message,
         recent_blockhash: Hash,
     ) -> Transaction {
@@ -213,7 +212,7 @@ impl Transaction {
     ///
     /// Panics when signing fails.
     pub fn new_with_compiled_instructions<T: Signers>(
-        from_keypairs: &T,
+        from_keypairs: T,
         keys: &[Pubkey],
         recent_blockhash: Hash,
         program_ids: Vec<Pubkey>,
@@ -239,7 +238,7 @@ impl Transaction {
     /// # Panics
     ///
     /// Panics when signing fails, use [`Transaction::try_sign`] to handle the error.
-    pub fn sign<T: Signers>(&mut self, keypairs: &T, recent_blockhash: Hash) {
+    pub fn sign<T: Signers>(&mut self, keypairs: T, recent_blockhash: Hash) {
         if let Err(e) = self.try_sign(keypairs, recent_blockhash) {
             panic!("Transaction::sign failed with error {:?}", e);
         }
@@ -252,7 +251,7 @@ impl Transaction {
     /// # Panics
     ///
     /// Panics when signing fails, use [`Transaction::try_partial_sign`] to handle the error.
-    pub fn partial_sign<T: Signers>(&mut self, keypairs: &T, recent_blockhash: Hash) {
+    pub fn partial_sign<T: Signers>(&mut self, keypairs: T, recent_blockhash: Hash) {
         if let Err(e) = self.try_partial_sign(keypairs, recent_blockhash) {
             panic!("Transaction::partial_sign failed with error {:?}", e);
         }
@@ -266,7 +265,7 @@ impl Transaction {
     /// Panics when signing fails, use [`Transaction::try_partial_sign_unchecked`] to handle the error.
     pub fn partial_sign_unchecked<T: Signers>(
         &mut self,
-        keypairs: &T,
+        keypairs: T,
         positions: Vec<usize>,
         recent_blockhash: Hash,
     ) {
@@ -282,7 +281,7 @@ impl Transaction {
     /// encountered
     pub fn try_sign<T: Signers>(
         &mut self,
-        keypairs: &T,
+        keypairs: T,
         recent_blockhash: Hash,
     ) -> std::result::Result<(), SignerError> {
         self.try_partial_sign(keypairs, recent_blockhash)?;
@@ -299,7 +298,7 @@ impl Transaction {
     ///  signatures and update recent_blockhash
     pub fn try_partial_sign<T: Signers>(
         &mut self,
-        keypairs: &T,
+        keypairs: T,
         recent_blockhash: Hash,
     ) -> std::result::Result<(), SignerError> {
         let positions = self.get_signing_keypair_positions(&keypairs.pubkeys())?;
@@ -315,7 +314,7 @@ impl Transaction {
     /// positions are correct.
     pub fn try_partial_sign_unchecked<T: Signers>(
         &mut self,
-        keypairs: &T,
+        keypairs: T,
         positions: Vec<usize>,
         recent_blockhash: Hash,
     ) -> std::result::Result<(), SignerError> {
