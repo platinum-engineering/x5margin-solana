@@ -1,49 +1,83 @@
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub type ProgramResult = Result<(), ProgramError>;
 
 /// Reasons the program may fail
-#[derive(Clone, Debug, Deserialize, Eq, Error, PartialEq, Serialize)]
+#[derive(Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "offchain", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "debug", derive(Debug, Error))]
+#[repr(u64)]
 pub enum ProgramError {
     /// Allows on-chain programs to implement program-specific error types and see them returned
     /// by the Solana runtime. A program-specific error may be any type that is represented as
     /// or serialized to a u32 integer.
-    #[error("Custom program error: {0:#x}")]
+    #[cfg_attr(feature = "debug", error("Custom program error: {0:#x}"))]
     Custom(u32),
-    #[error("The arguments provided to a program instruction where invalid")]
+    #[cfg_attr(
+        feature = "debug",
+        error("The arguments provided to a program instruction where invalid")
+    )]
     InvalidArgument,
-    #[error("An instruction's data contents was invalid")]
+    #[cfg_attr(feature = "debug", error("An instruction's data contents was invalid"))]
     InvalidInstructionData,
-    #[error("An account's data contents was invalid")]
+    #[cfg_attr(feature = "debug", error("An account's data contents was invalid"))]
     InvalidAccountData,
-    #[error("An account's data was too small")]
+    #[cfg_attr(feature = "debug", error("An account's data was too small"))]
     AccountDataTooSmall,
-    #[error("An account's balance was too small to complete the instruction")]
+    #[cfg_attr(
+        feature = "debug",
+        error("An account's balance was too small to complete the instruction")
+    )]
     InsufficientFunds,
-    #[error("The account did not have the expected program id")]
+    #[cfg_attr(
+        feature = "debug",
+        error("The account did not have the expected program id")
+    )]
     IncorrectProgramId,
-    #[error("A signature was required but not found")]
+    #[cfg_attr(feature = "debug", error("A signature was required but not found"))]
     MissingRequiredSignature,
-    #[error("An initialize instruction was sent to an account that has already been initialized")]
+    #[cfg_attr(
+        feature = "debug",
+        error(
+            "An initialize instruction was sent to an account that has already been initialized"
+        )
+    )]
     AccountAlreadyInitialized,
-    #[error("An attempt to operate on an account that hasn't been initialized")]
+    #[cfg_attr(
+        feature = "debug",
+        error("An attempt to operate on an account that hasn't been initialized")
+    )]
     UninitializedAccount,
-    #[error("The instruction expected additional account keys")]
+    #[cfg_attr(
+        feature = "debug",
+        error("The instruction expected additional account keys")
+    )]
     NotEnoughAccountKeys,
-    #[error("Failed to borrow a reference to account data, already borrowed")]
+    #[cfg_attr(
+        feature = "debug",
+        error("Failed to borrow a reference to account data, already borrowed")
+    )]
     AccountBorrowFailed,
-    #[error("Length of the seed is too long for address generation")]
+    #[cfg_attr(
+        feature = "debug",
+        error("Length of the seed is too long for address generation")
+    )]
     MaxSeedLengthExceeded,
-    #[error("Provided seeds do not result in a valid address")]
+    #[cfg_attr(
+        feature = "debug",
+        error("Provided seeds do not result in a valid address")
+    )]
     InvalidSeeds,
-    #[error("IO Error: {0}")]
+    #[cfg_attr(feature = "debug", error("IO Error: {0}"))]
     BorshIoError(String),
-    #[error("An account does not have enough lamports to be rent-exempt")]
+    #[cfg_attr(
+        feature = "debug",
+        error("An account does not have enough lamports to be rent-exempt")
+    )]
     AccountNotRentExempt,
-    #[error("Unsupported sysvar")]
+    #[cfg_attr(feature = "debug", error("Unsupported sysvar"))]
     UnsupportedSysvar,
-    #[error("Provided owner is not allowed")]
+    #[cfg_attr(feature = "debug", error("Provided owner is not allowed"))]
     IllegalOwner,
 }
 

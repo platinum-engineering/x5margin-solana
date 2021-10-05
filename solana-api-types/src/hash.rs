@@ -1,15 +1,21 @@
 //! The `hash` module provides functions for creating SHA-256 hashes.
-use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, fmt, mem, str::FromStr};
+use std::convert::TryFrom;
+
+#[cfg(feature = "offchain")]
+use std::{fmt, mem, str::FromStr};
+#[cfg(feature = "offchain")]
 use thiserror::Error;
 
 #[cfg(feature = "crypto")]
 pub use hasher::*;
 
+/// Amount of bytes in a hash.
 pub const HASH_BYTES: usize = 32;
 /// Maximum string length of a base58 encoded hash
-const MAX_BASE58_LEN: usize = 44;
-#[derive(Serialize, Deserialize, Clone, Copy, Default, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub const MAX_BASE58_LEN: usize = 44;
+
+#[derive(Clone, Copy, Default, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "offchain", derive(serde::Serialize, serde::Deserialize))]
 #[repr(transparent)]
 pub struct Hash(pub [u8; HASH_BYTES]);
 
@@ -34,8 +40,6 @@ mod hasher {
             }
         }
         pub fn result(self) -> Hash {
-            // At the time of this writing, the sha2 library is stuck on an old version
-            // of generic_array (0.9.0). Decouple ourselves with a clone to our version.
             Hash(<[u8; HASH_BYTES]>::try_from(self.hasher.finalize().as_slice()).unwrap())
         }
     }
@@ -47,12 +51,14 @@ impl AsRef<[u8]> for Hash {
     }
 }
 
+#[cfg(feature = "offchain")]
 impl fmt::Debug for Hash {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", bs58::encode(self.0).into_string())
     }
 }
 
+#[cfg(feature = "offchain")]
 impl fmt::Display for Hash {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", bs58::encode(self.0).into_string())
@@ -60,6 +66,7 @@ impl fmt::Display for Hash {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[cfg(feature = "offchain")]
 pub enum ParseHashError {
     #[error("string decoded to wrong size for hash")]
     WrongSize,
@@ -67,6 +74,7 @@ pub enum ParseHashError {
     Invalid,
 }
 
+#[cfg(feature = "offchain")]
 impl FromStr for Hash {
     type Err = ParseHashError;
 
@@ -95,6 +103,7 @@ impl Hash {
     }
 
     /// unique Hash for tests and benchmarks.
+    #[cfg(feature = "offchain")]
     pub fn new_unique() -> Self {
         use std::sync::atomic::{AtomicU64, Ordering};
         static I: AtomicU64 = AtomicU64::new(1);

@@ -14,6 +14,12 @@ const MAX_BASE58_SIGNATURE_LEN: usize = 88;
 
 #[repr(transparent)]
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
+/// An Ed25519 digital signature.
+///
+/// In the Solana runtime, signatures signal to the runtime that some action was authorized for a specific account by the holder of its private key.
+///
+/// The presence of a signature in a transaction for a specific account results in the `is_signer` field being set during program execution for that account, letting the program know that the account owner
+/// "signed off" on this operation.
 pub struct Signature([u8; 64]);
 
 impl Default for Signature {

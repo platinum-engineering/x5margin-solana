@@ -1,12 +1,10 @@
+use std::convert::TryFrom;
+
 use serde::{Deserialize, Serialize};
+use serde_json::{from_value, Value};
 use thiserror::Error;
 
-use crate::{
-    error::ClientErrorKind, short_vec, signature::SignerError, ClientError, CompiledInstruction,
-    Instruction, InstructionError, Message, Pubkey, Signature, Signers, Slot, TransactionEncoding,
-};
-
-use super::Hash;
+use crate::*;
 
 /// Reasons a transaction might be rejected.
 #[derive(Error, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -87,26 +85,6 @@ pub enum TransactionError {
     AccountBorrowOutstanding,
 }
 
-pub type Result<T> = std::result::Result<T, TransactionError>;
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum TransactionConfirmationStatus {
-    Processed,
-    Confirmed,
-    Finalized,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TransactionStatus {
-    pub slot: Slot,
-    pub confirmations: Option<usize>, // None = rooted
-    pub status: Result<()>,           // legacy field
-    pub err: Option<TransactionError>,
-    pub confirmation_status: Option<TransactionConfirmationStatus>,
-}
-
 /// An atomic transaction
 #[derive(Debug, PartialEq, Default, Eq, Clone, Serialize, Deserialize)]
 pub struct Transaction {
@@ -120,26 +98,188 @@ pub struct Transaction {
     pub message: Message,
 }
 
-impl Transaction {
-    pub fn encode(
-        &self,
-        encoding: TransactionEncoding,
-    ) -> std::result::Result<String, ClientError> {
-        let serialized = bincode::serialize(self).map_err(|e| {
-            ClientErrorKind::Custom(format!("transaction serialization failed: {}", e))
-        })?;
-        let encoded = match encoding {
-            TransactionEncoding::Base58 => bs58::encode(serialized).into_string(),
-            TransactionEncoding::Base64 => base64::encode(serialized),
-            _ => {
-                return Err(ClientErrorKind::Custom(format!(
-                    "unsupported transaction encoding: {}. Supported encodings: base58, base64",
-                    encoding
-                ))
-                .into())
-            }
+pub struct ConfirmedTransactionMetadata {
+    pub error: Option<TransactionError>,
+    pub fee: u64,
+    pub logs: Vec<String>,
+}
+
+impl TryFrom<&Value> for ConfirmedTransactionMetadata {
+    type Error = JsonValueParseError;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        if !value.is_object() {
+            return Err(JsonValueParseError::NotObject);
+        }
+
+        let error = &value["err"];
+        let error = if error.is_object() {
+            Some(from_value(error.clone())?)
+        } else {
+            None
         };
-        Ok(encoded)
+
+        let logs = value["logMessages"]
+            .as_array()
+            .map(|s| {
+                s.iter()
+                    .flat_map(|v| v.as_str().map(|s| s.to_owned()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        let fee = value["fee"]
+            .as_u64()
+            .ok_or_else(|| JsonValueParseError::invalid_value("fee", "u64", &value["fee"]))?;
+
+        Ok(Self { error, fee, logs })
+    }
+}
+
+pub struct ConfirmedTransaction {
+    pub slot: u64,
+    pub transaction: Transaction,
+    pub block_time: Option<i64>,
+    pub metadata: Option<ConfirmedTransactionMetadata>,
+}
+
+impl TryFrom<&Value> for ConfirmedTransaction {
+    type Error = JsonValueParseError;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        if !value.is_object() {
+            return Err(JsonValueParseError::NotObject);
+        }
+
+        let slot = value["slot"]
+            .as_u64()
+            .ok_or_else(|| JsonValueParseError::invalid_value("slot", "u64", &value["slot"]))?;
+
+        let block_time = value["blockTime"].as_i64();
+        let transaction = value["transaction"].as_str().ok_or_else(|| {
+            JsonValueParseError::invalid_value("transaction", "string", &value["transaction"])
+        })?;
+
+        let transaction = base64::decode(transaction)?;
+        let transaction = bincode::deserialize(&transaction)?;
+        let metadata = if !value["meta"].is_null() {
+            Some(
+                ConfirmedTransactionMetadata::try_from(&value["meta"])
+                    .map_err(|error| JsonValueParseError::subfield("meta", error))?,
+            )
+        } else {
+            None
+        };
+
+        Ok(Self {
+            slot,
+            transaction,
+            block_time,
+            metadata,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TransactionSummary {
+    pub signature: Signature,
+    pub slot: Slot,
+    pub error: Option<TransactionError>,
+    pub memo: Option<String>,
+    pub block_time: Option<i64>,
+}
+
+impl TryFrom<&Value> for TransactionSummary {
+    type Error = JsonValueParseError;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        if !value.is_object() {
+            return Err(JsonValueParseError::NotObject);
+        }
+
+        let slot = value["slot"]
+            .as_u64()
+            .ok_or_else(|| JsonValueParseError::invalid_value("slot", "u64", &value["slot"]))?;
+
+        let signature = value["signature"].as_str().ok_or_else(|| {
+            JsonValueParseError::invalid_value("signature", "string", &value["signature"])
+        })?;
+        let signature = bincode::deserialize(&bs58::decode(signature).into_vec()?)?;
+        let memo = value["memo"].as_str().map(|s| s.to_owned());
+        let block_time = value["blockTime"].as_i64();
+        let error = if value["err"].is_object() {
+            Some(serde_json::from_value(value["err"].clone())?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            signature,
+            slot,
+            error,
+            memo,
+            block_time,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TransactionStatus {
+    /// The slot at which the transaction was processed.
+    pub slot: Slot,
+    /// Number of blocks since the signature was confirmed, `None` if the signature is in a rooted block, as well as finalized by a supermajority of the cluster.
+    pub confirmations: Option<u64>,
+    /// The transaction's cluster confirmation status.
+    pub confirmation_status: Option<CommitmentLevel>,
+    /// Transaction error, if any.
+    pub error: Option<TransactionError>,
+}
+
+impl TryFrom<&Value> for TransactionStatus {
+    type Error = JsonValueParseError;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        if !value.is_object() {
+            return Err(JsonValueParseError::NotObject);
+        }
+
+        let slot = value["slot"]
+            .as_u64()
+            .ok_or_else(|| JsonValueParseError::invalid_value("slot", "u64", &value["slot"]))?;
+
+        let confirmations = value["confirmations"].as_u64();
+        let confirmation_status = value["confirmationStatus"]
+            .as_str()
+            .and_then(|s| CommitmentLevel::from_str(s));
+
+        let error = if value["err"].is_object() {
+            Some(serde_json::from_value(value["err"].clone())?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            slot,
+            error,
+            confirmation_status,
+            confirmations,
+        })
+    }
+}
+
+impl Transaction {
+    /// Encode this transaction into its binary, on-wire representation.
+    ///
+    /// The resulting [`Vec`] is the direct byte representation of the transaction as it appears when broadcasted on the network. Compatible with Solana ABIs.
+    pub fn encode_bincode(&self) -> Vec<u8> {
+        bincode::serialize(self).expect("serialization of Transaction should be infallible")
+    }
+
+    /// Encode this transaction into its Base64 representation.
+    ///
+    /// This is the same representation as [`Transaction::encode_bincode`], encoded as a Base64-string for usage in contexts where only strings are accepted, such as in the JSON RPC.
+    pub fn encode_b64(&self) -> String {
+        base64::encode(self.encode_bincode())
     }
 
     pub fn new_unsigned(message: Message) -> Self {
@@ -334,7 +474,10 @@ impl Transaction {
     }
 
     /// Get the positions of the pubkeys in `account_keys` associated with signing keypairs
-    pub fn get_signing_keypair_positions(&self, pubkeys: &[Pubkey]) -> Result<Vec<Option<usize>>> {
+    pub fn get_signing_keypair_positions(
+        &self,
+        pubkeys: &[Pubkey],
+    ) -> Result<Vec<Option<usize>>, TransactionError> {
         if self.message.account_keys.len() < self.message.header.num_required_signatures as usize {
             return Err(TransactionError::InvalidAccountIndex);
         }
@@ -349,7 +492,7 @@ impl Transaction {
 
     #[cfg(feature = "crypto")]
     /// Verify the transaction
-    pub fn verify(&self) -> Result<()> {
+    pub fn verify(&self) -> Result<(), TransactionError> {
         let message_bytes = self.message_data();
         if !self
             ._verify_with_results(&message_bytes)

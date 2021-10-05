@@ -1,43 +1,69 @@
-use serde::{Deserialize, Serialize};
+use crate::*;
 use solar_macros::parse_base58;
-use thiserror::Error;
 
-use crate::{instruction::Instruction, AccountMeta, Pubkey};
+#[cfg(feature = "offchain")]
+use thiserror::Error;
 
 pub const ID: &Pubkey = &Pubkey::new(parse_base58!("11111111111111111111111111111111"));
 
-#[derive(Error, Debug, Serialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
+#[cfg_attr(feature = "offchain", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "debug", derive(Debug, Error))]
 pub enum SystemError {
-    #[error("an account with the same address already exists")]
+    #[cfg_attr(
+        feature = "debug",
+        error("an account with the same address already exists")
+    )]
     AccountAlreadyInUse,
-    #[error("account does not have enough SOL to perform the operation")]
+    #[cfg_attr(
+        feature = "debug",
+        error("account does not have enough SOL to perform the operation")
+    )]
     ResultWithNegativeLamports,
-    #[error("cannot assign account to this program id")]
+    #[cfg_attr(feature = "debug", error("cannot assign account to this program id"))]
     InvalidProgramId,
-    #[error("cannot allocate account data of this length")]
+    #[cfg_attr(
+        feature = "debug",
+        error("cannot allocate account data of this length")
+    )]
     InvalidAccountDataLength,
-    #[error("length of requested seed is too long")]
+    #[cfg_attr(feature = "debug", error("length of requested seed is too long"))]
     MaxSeedLengthExceeded,
-    #[error("provided address does not match addressed derived from seed")]
+    #[cfg_attr(
+        feature = "debug",
+        error("provided address does not match addressed derived from seed")
+    )]
     AddressWithSeedMismatch,
 }
 
-#[derive(Error, Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
+#[cfg_attr(feature = "debug", derive(Debug, Error))]
 pub enum NonceError {
-    #[error("recent blockhash list is empty")]
+    #[cfg_attr(feature = "debug", error("recent blockhash list is empty"))]
     NoRecentBlockhashes,
-    #[error("stored nonce is still in recent_blockhashes")]
+    #[cfg_attr(
+        feature = "debug",
+        error("stored nonce is still in recent_blockhashes")
+    )]
     NotExpired,
-    #[error("specified nonce does not match stored nonce")]
+    #[cfg_attr(
+        feature = "debug",
+        error("specified nonce does not match stored nonce")
+    )]
     UnexpectedValue,
-    #[error("cannot handle request in current account state")]
+    #[cfg_attr(
+        feature = "debug",
+        error("cannot handle request in current account state")
+    )]
     BadAccountState,
 }
 
 /// maximum permitted size of data: 10 MB
 pub const MAX_PERMITTED_DATA_LENGTH: u64 = 10 * 1024 * 1024;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
+#[cfg_attr(feature = "offchain", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "debug", derive(Debug))]
 pub enum SystemInstruction {
     /// Create a new account
     ///
@@ -203,6 +229,7 @@ pub enum SystemInstruction {
     },
 }
 
+#[cfg(feature = "offchain")]
 pub fn create_account(
     from_pubkey: &Pubkey,
     to_pubkey: &Pubkey,
@@ -225,8 +252,7 @@ pub fn create_account(
     )
 }
 
-// we accept `to` as a parameter so that callers do their own error handling when
-//   calling create_with_seed()
+#[cfg(feature = "offchain")]
 pub fn create_account_with_seed(
     from_pubkey: &Pubkey,
     to_pubkey: &Pubkey, // must match create_with_seed(base, seed, owner)
@@ -255,6 +281,7 @@ pub fn create_account_with_seed(
     )
 }
 
+#[cfg(feature = "offchain")]
 pub fn assign(pubkey: &Pubkey, owner: &Pubkey) -> Instruction {
     let account_metas = vec![AccountMeta::new(*pubkey, true)];
     Instruction::new_with_bincode(
@@ -264,6 +291,7 @@ pub fn assign(pubkey: &Pubkey, owner: &Pubkey) -> Instruction {
     )
 }
 
+#[cfg(feature = "offchain")]
 pub fn assign_with_seed(
     address: &Pubkey, // must match create_with_seed(base, seed, owner)
     base: &Pubkey,
@@ -285,6 +313,7 @@ pub fn assign_with_seed(
     )
 }
 
+#[cfg(feature = "offchain")]
 pub fn transfer(from_pubkey: &Pubkey, to_pubkey: &Pubkey, lamports: u64) -> Instruction {
     let account_metas = vec![
         AccountMeta::new(*from_pubkey, true),
@@ -297,6 +326,7 @@ pub fn transfer(from_pubkey: &Pubkey, to_pubkey: &Pubkey, lamports: u64) -> Inst
     )
 }
 
+#[cfg(feature = "offchain")]
 pub fn transfer_with_seed(
     from_pubkey: &Pubkey, // must match create_with_seed(base, seed, owner)
     from_base: &Pubkey,
@@ -321,11 +351,13 @@ pub fn transfer_with_seed(
     )
 }
 
+#[cfg(feature = "offchain")]
 pub fn allocate(pubkey: &Pubkey, space: u64) -> Instruction {
     let account_metas = vec![AccountMeta::new(*pubkey, true)];
     Instruction::new_with_bincode(*ID, &SystemInstruction::Allocate { space }, account_metas)
 }
 
+#[cfg(feature = "offchain")]
 pub fn allocate_with_seed(
     address: &Pubkey, // must match create_with_seed(base, seed, owner)
     base: &Pubkey,

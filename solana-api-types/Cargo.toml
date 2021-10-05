@@ -6,57 +6,62 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
+# Enables APIs that are only available in onchain contexts.
 onchain = []
-# Enables cryptographic API for transaction signing
+
+# Enables cryptographic APIs for transaction signing and verification. Gated under separate feature, because not all cryptographic APIs are available under WASM.
 crypto = [
-  "extended",
+  "offchain",
   "sha2",
   "sha3",
   "ed25519-dalek",
+  "curve25519-dalek",
   "rand",
 ]
-rpc = [
-  "reqwest",
-  "ruzstd",
-  "serde-big-array",
-  "wasm-bindgen"
+
+# Debug impls generate garbage code in BPF codegen, we don't really want any of that.
+debug = ["thiserror"]
+
+# Enables extended functionality that might not be available in onchain contexts.
+offchain = [
+  "debug",
+  "async-trait", 
+  "bincode",
+  "base64",
+  "bs58",
+  "itertools",
+  "serde",
+  "serde_json",
+  "anyhow",
 ]
-# Enables extended functionality that might not be available under non-x86 targets, such as WASM or BPF
-default = ["crypto", "rpc"]
-extended = [
-  "curve25519-dalek",
-]
+
+# Enables a bridge to solana-sdk and solana-program-test to execute tests.
 runtime-test = [
-  "crypto",
+  "default",
   "solana-sdk",
   "solana-program",
   "solana-program-test",
   "anyhow",
 ]
 
-[dependencies]
-anyhow = {version = "1.0", optional = true}
-async-trait = "0.1"
-base64 = "0.12"
-bincode = "1.3"
-bs58 = "0.4"
-generic-array = {version = "0.14.3", default-features = false, features = ["serde", "more_lengths"]}
-itertools = "0.10"
-lazy_static = "1.4"
-reqwest = {version = "0.11", optional = true}
-serde = {version = "^1.0", features = ["derive"]}
-serde-big-array = {version = "0.3.2", features = ["const-generics"], optional = true}
-serde_bytes = "0.11"
-serde_derive = "^1.0"
-serde_json = "1.0"
-thiserror = "1.0"
-# zstd не билдится под wasm, поэтому нашел реализацию декодера на чистом расте.
-# zstd = {version = "0.5", features = ["wasm"]}
-ruzstd = {version = "0.2", optional = true}
-wasm-bindgen = {version = "0.2", optional = true}
+default = ["offchain", "onchain", "crypto", "debug"]
 
+
+[dependencies]
 solar-macros = {path = "../solar-macros"}
 
+# Off-chain dependencies
+thiserror = {version = "1.0", optional = true}
+async-trait = {version = "0.1", optional = true}
+bincode = {version = "1.3", optional = true}
+base64 = {version = "0.12", optional = true}
+bs58 = {version = "0.4", optional = true}
+itertools = {version = "0.10", optional = true}
+serde = {version = "^1.0", features = ["derive"], optional = true}
+serde_json = {version = "1.0", optional = true}
+anyhow = {version = "1.0", optional = true}
+
+# Cryptographic functionality that isn't available on BPF or WASM
 curve25519-dalek = {version = "~ 2.1.0", optional = true}
 ed25519-dalek = {version = "= 1.0.1", optional = true}
 ed25519-dalek-bip32 = {version = "0.1.1", optional = true}
@@ -64,6 +69,7 @@ rand = {version = "0.7", optional = true}
 sha2 = {version = "0.9.2", optional = true}
 sha3 = {version = "0.9.1", optional = true}
 
+# Solana SDK bridge
 solana-program = {version = "= 1.7.2", optional = true}
 solana-program-test = {version = "= 1.7.2", optional = true}
 solana-sdk = {version = "= 1.7.2", optional = true}

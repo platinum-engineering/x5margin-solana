@@ -24,12 +24,7 @@ macro_rules! declare_sysvar_id(
 );
 
 // Sysvar utilities
-pub trait Sysvar:
-    SysvarId + Default + Sized + serde::Serialize + serde::de::DeserializeOwned
-{
-    fn size_of() -> usize {
-        bincode::serialized_size(&Self::default()).unwrap() as usize
-    }
+pub trait Sysvar: SysvarId + Default + Sized {
     fn get() -> Result<Self, ProgramError> {
         Err(ProgramError::UnsupportedSysvar)
     }
@@ -81,7 +76,6 @@ macro_rules! impl_sysvar_get {
 
 pub mod clock {
     use super::Sysvar;
-    use serde::{Deserialize, Serialize};
 
     use crate::{Epoch, Slot, UnixTimestamp};
 
@@ -93,7 +87,8 @@ pub mod clock {
     ///  as the network progresses).
     ///
     #[repr(C)]
-    #[derive(Serialize, Clone, Deserialize, Debug, Default, PartialEq)]
+    #[derive(Clone, Default, PartialEq)]
+    #[cfg_attr(feature = "debug", derive(Debug))]
     pub struct Clock {
         /// the current network/bank Slot
         pub slot: Slot,
@@ -118,12 +113,12 @@ pub mod clock {
 pub mod rent {
 
     use crate::{impl_sysvar_get, sysvar::Sysvar};
-    use serde::{Deserialize, Serialize};
 
     crate::declare_sysvar_id!("SysvarRent111111111111111111111111111111111", Rent);
 
     #[repr(C)]
-    #[derive(Serialize, Deserialize, PartialEq, Clone, Copy, Debug)]
+    #[derive(PartialEq, Clone, Copy)]
+    #[cfg_attr(feature = "debug", derive(Debug))]
     pub struct Rent {
         /// Rental rate
         pub lamports_per_byte_year: u64,

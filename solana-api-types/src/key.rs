@@ -1,4 +1,4 @@
-use crate::{signature::SignerError, Pubkey, Signature};
+use super::*;
 
 #[cfg(feature = "crypto")]
 mod crypto_imports {
@@ -11,7 +11,9 @@ mod crypto_imports {
 use crypto_imports::*;
 
 #[cfg(feature = "crypto")]
-/// A vanilla Ed25519 key pair
+/// A plain Ed25519 Elliptic-Curve keypair consisting of a private and a public key.
+///
+/// Keypairs are used to generate signatures for transactions, which allow the Solana runtime to verify that some action was authorized by the private key holder.
 #[derive(Debug)]
 pub struct Keypair(ed25519_dalek::Keypair);
 

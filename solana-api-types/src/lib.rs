@@ -1,46 +1,73 @@
-#![cfg_attr(target_arch = "bpf", feature(min_const_generics))]
+#![allow(clippy::nonstandard_macro_braces)]
 
-use std::fmt;
+#[cfg(feature = "offchain")]
+#[macro_use]
+extern crate serde;
 
-use async_trait::async_trait;
-use serde_json::Value;
+#[cfg(feature = "debug")]
+#[macro_use]
+extern crate thiserror;
 
-use serde::{Deserialize, Serialize};
+// Modules that are available under all features.
 
 pub mod entrypoint;
-pub mod error;
-pub mod faucet;
 pub mod hash;
 pub mod instruction;
-pub mod message;
 pub mod program;
 pub mod pubkey;
-pub mod short_vec;
-pub mod signature;
-pub mod signers;
 pub mod syscalls;
 pub mod system;
 pub mod sysvar;
-pub mod transaction;
 
-#[cfg(feature = "runtime-test")]
-pub mod program_test;
-
-#[cfg(feature = "runtime-test")]
-pub mod sdk_proxy;
-
-mod key;
-#[cfg(feature = "crypto")]
-pub use key::Keypair;
-pub use key::Signer;
-
-pub use error::{ClientError, ClientErrorKind, RpcError};
 pub use hash::Hash;
 pub use instruction::{Instruction, InstructionError};
 pub use pubkey::Pubkey;
-pub use signature::Signature;
+
+// Modules that are only available when using the Solana SDK bridge.
+
+#[cfg(feature = "runtime-test")]
+pub mod program_test;
+#[cfg(feature = "runtime-test")]
+pub mod sdk_proxy;
+
+#[cfg(feature = "crypto")]
+pub use key::Keypair;
+
+// Modules that are only available when executing in an offchain environment.
+
+#[cfg(feature = "offchain")]
+pub mod client;
+#[cfg(feature = "offchain")]
+pub mod error;
+#[cfg(feature = "offchain")]
+pub mod key;
+#[cfg(feature = "offchain")]
+pub mod message;
+#[cfg(feature = "offchain")]
+pub mod short_vec;
+#[cfg(feature = "offchain")]
+pub mod signature;
+#[cfg(feature = "offchain")]
+pub mod signers;
+#[cfg(feature = "offchain")]
+pub mod transaction;
+#[cfg(feature = "offchain")]
+pub use error::{ClientError, JsonValueParseError};
+#[cfg(feature = "offchain")]
+pub use instruction::CompiledInstruction;
+#[cfg(feature = "offchain")]
+pub use key::Signer;
+#[cfg(feature = "offchain")]
+pub use message::Message;
+#[cfg(feature = "offchain")]
+pub use signature::{Signature, SignerError};
+#[cfg(feature = "offchain")]
 pub use signers::Signers;
-pub use transaction::{Transaction, TransactionError, TransactionStatus};
+#[cfg(feature = "offchain")]
+pub use transaction::{
+    ConfirmedTransaction, ConfirmedTransactionMetadata, Transaction, TransactionError,
+    TransactionStatus, TransactionSummary,
+};
 
 /// Epoch is a unit of time a given leader schedule is honored,
 ///  some number of Slots.
@@ -54,16 +81,8 @@ pub type Slot = u64;
 /// expressed as Unix time (ie. seconds since the Unix epoch)
 pub type UnixTimestamp = i64;
 
-pub const HASH_BYTES: usize = 32;
-
-#[derive(Serialize, Deserialize, Default, Clone, Copy, Debug, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct CommitmentConfig {
-    pub commitment: CommitmentLevel,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[serde(rename_all = "camelCase")]
+#[cfg(feature = "offchain")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 /// An attribute of a slot. It describes how finalized a block is at some point in time. For example, a slot
 /// is said to be at the max level immediately after the cluster recognizes the block at that slot as
 /// finalized. When querying the ledger state, use lower levels of commitment to report progress and higher
@@ -85,14 +104,30 @@ pub enum CommitmentLevel {
     Finalized,
 }
 
+#[cfg(feature = "offchain")]
 impl Default for CommitmentLevel {
     fn default() -> Self {
         Self::Finalized
     }
 }
 
+#[cfg(feature = "offchain")]
+impl CommitmentLevel {
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &str) -> Option<Self> {
+        Some(match s {
+            "processed" => Self::Processed,
+            "confirmed" => Self::Confirmed,
+            "finalized" => Self::Finalized,
+            _ => return None,
+        })
+    }
+}
+
 /// Account metadata used to define Instructions
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Clone)]
+#[cfg_attr(feature = "debug", derive(Debug))]
+#[cfg_attr(feature = "offchain", derive(Serialize, Deserialize))]
 pub struct AccountMeta {
     /// An account's public key
     pub pubkey: Pubkey,
@@ -120,572 +155,36 @@ impl AccountMeta {
     }
 }
 
-/// An instruction to execute a program
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct CompiledInstruction {
-    /// Index into the transaction keys array indicating the program account that executes this instruction
-    pub program_id_index: u8,
-    /// Ordered indices into the transaction keys array indicating which accounts to pass to the program
-    #[serde(with = "short_vec")]
-    pub accounts: Vec<u8>,
-    /// The program input data
-    #[serde(with = "short_vec")]
-    pub data: Vec<u8>,
-}
-
-#[derive(Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct MessageHeader {
-    /// The number of signatures required for this message to be considered valid. The
-    /// signatures must match the first `num_required_signatures` of `account_keys`.
-    /// NOTE: Serialization-related changes must be paired with the direct read at sigverify.
-    pub num_required_signatures: u8,
-
-    /// The last num_readonly_signed_accounts of the signed keys are read-only accounts. Programs
-    /// may process multiple transactions that load read-only accounts within a single PoH entry,
-    /// but are not permitted to credit or debit lamports or modify account data. Transactions
-    /// targeting the same read-write account are evaluated sequentially.
-    pub num_readonly_signed_accounts: u8,
-
-    /// The last num_readonly_unsigned_accounts of the unsigned keys are read-only accounts.
-    pub num_readonly_unsigned_accounts: u8,
-}
-
-#[derive(Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Message {
-    /// The message header, identifying signed and read-only `account_keys`
-    /// NOTE: Serialization-related changes must be paired with the direct read at sigverify.
-    pub header: MessageHeader,
-
-    /// All the account keys used by this transaction
-    #[serde(with = "short_vec")]
-    pub account_keys: Vec<Pubkey>,
-
-    /// The id of a recent ledger entry.
-    pub recent_blockhash: Hash,
-
-    /// Programs that will be executed in sequence and committed in one atomic transaction if all
-    /// succeed.
-    #[serde(with = "short_vec")]
-    pub instructions: Vec<CompiledInstruction>,
-}
-
-/// An Account with data that is stored on chain
-#[repr(C)]
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Default, Debug)]
-#[serde(rename_all = "camelCase")]
+/// An off-chain representation of a Solana account.
+///
+/// A Solana account is a container of data associated with a specific public key (address).
+///
+/// An account is created as soon as lamports are deposited to a specific address, after which the account will be stored in the ledger.
+///
+/// Accounts can be expanded to serve as containers of arbitrary binary data by using the System program instructions.
+#[derive(PartialEq, Eq, Clone, Default)]
+#[cfg(feature = "offchain")]
 pub struct Account {
-    /// lamports in the account
+    /// Lamport balance of the account. 1 lamport = 10^-9 SOL.
+    ///
+    /// Lamports are used to pay "rent" once per epoch. The size of the rent is dependent on the size of the account.
+    ///
+    /// There exists a rent-exemption balance threshold, which, if exceeded, stops the account from owing rent. Currently this threshold is 7.12 SOL per Mebibyte, or 6709 lamports per byte.
     pub lamports: u64,
-    /// data held in this account
-    #[serde(with = "serde_bytes")]
+    /// Arbitrary associated account data. May be empty.
     pub data: Vec<u8>,
-    /// the program that owns this account. If executable, the program that loads this account.
+    /// The program that owns this account. If this account is an executable program, the loader that executes this program.
+    ///
+    /// Only the program that owns this account is allowed to modify its data, and debit its balance.
+    /// Non-owner programs have read-only access.
+    ///
+    /// When an account is initially created, its owner is set to the System program.
+    /// The System program can then transfer ownership of the account to another program, granting it write permissions for that account.
     pub owner: Pubkey,
-    /// this account's data contains a loaded program (and is now read-only)
+    /// Whether this account is an executable program.
     pub executable: bool,
-    /// the epoch at which this account will next owe rent
+    /// The epoch at which this account will next owe rent.
     pub rent_epoch: Epoch,
-    /// public key of the account
+    /// The public key of the account.
     pub pubkey: Pubkey,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct ParsedAccount {
-    pub program: String,
-    pub parsed: Value,
-    pub space: u64,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct UiAccount {
-    pub lamports: u64,
-    pub data: UiAccountData,
-    pub owner: String,
-    pub executable: bool,
-    pub rent_epoch: Epoch,
-}
-
-impl UiAccount {
-    #[cfg(feature = "rpc")]
-    pub fn decode(&self, pubkey: Pubkey) -> Option<Account> {
-        use std::{io::Read, str::FromStr};
-
-        let data = match &self.data {
-            UiAccountData::Json(_) => None,
-            UiAccountData::LegacyBinary(blob) => bs58::decode(blob).into_vec().ok(),
-            UiAccountData::Binary(blob, encoding) => match encoding {
-                UiAccountEncoding::Base58 => bs58::decode(blob).into_vec().ok(),
-                UiAccountEncoding::Base64 => base64::decode(blob).ok(),
-                UiAccountEncoding::Base64Zstd => base64::decode(blob)
-                    .ok()
-                    .map(|zstd_data| {
-                        let mut rdr = std::io::BufReader::new(zstd_data.as_slice());
-                        let mut data = vec![];
-
-                        ruzstd::StreamingDecoder::new(&mut rdr)
-                            .and_then(|mut reader| {
-                                reader.read_to_end(&mut data).map_err(|err| err.to_string())
-                            })
-                            .map(|_| data)
-                            .ok()
-                    })
-                    .flatten(),
-                UiAccountEncoding::Binary | UiAccountEncoding::JsonParsed => None,
-            },
-        }?;
-        Some(Account {
-            lamports: self.lamports,
-            data,
-            owner: Pubkey::from_str(&self.owner).ok()?,
-            executable: self.executable,
-            rent_epoch: self.rent_epoch,
-            pubkey,
-        })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", untagged)]
-pub enum UiAccountData {
-    LegacyBinary(String), // Legacy. Retained for RPC backwards compatibility
-    Json(ParsedAccount),
-    Binary(String, UiAccountEncoding),
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub enum UiAccountEncoding {
-    Binary, // Legacy. Retained for RPC backwards compatibility
-    Base58,
-    Base64,
-    JsonParsed,
-    #[serde(rename = "base64+zstd")]
-    Base64Zstd,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub enum TransactionEncoding {
-    Binary, // Legacy. Retained for RPC backwards compatibility
-    Base64,
-    Base58,
-    Json,
-    JsonParsed,
-}
-
-impl Default for TransactionEncoding {
-    fn default() -> Self {
-        TransactionEncoding::Base64
-    }
-}
-
-impl fmt::Display for TransactionEncoding {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let v = serde_json::to_value(self).map_err(|_| fmt::Error)?;
-        let s = v.as_str().ok_or(fmt::Error)?;
-        write!(f, "{}", s)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UiDataSliceConfig {
-    pub offset: usize,
-    pub length: usize,
-}
-
-/// Configuration object for
-/// [getAccountInfo](https://docs.solana.com/developing/clients/jsonrpc-api#getaccountinfo) request.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RpcAccountInfoConfig {
-    pub encoding: Option<UiAccountEncoding>,
-    pub data_slice: Option<UiDataSliceConfig>,
-    #[serde(flatten)]
-    pub commitment: Option<CommitmentConfig>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum MemcmpEncoding {
-    Binary,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", untagged)]
-pub enum MemcmpEncodedBytes {
-    Binary(String),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Memcmp {
-    /// Data offset to begin match
-    pub offset: usize,
-    /// Bytes, encoded with specified encoding, or default Binary
-    pub bytes: MemcmpEncodedBytes,
-    /// Optional encoding specification
-    pub encoding: Option<MemcmpEncoding>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum RpcFilterType {
-    DataSize(u64),
-    Memcmp(Memcmp),
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RpcProgramAccountsConfig {
-    pub filters: Option<Vec<RpcFilterType>>,
-    #[serde(flatten)]
-    pub account_config: RpcAccountInfoConfig,
-    pub with_context: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RpcKeyedAccount {
-    pub pubkey: String,
-    pub account: UiAccount,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RpcSignatureStatusConfig {
-    pub search_transaction_history: bool,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RpcSignaturesForAddressConfig {
-    pub before: Option<String>, // Signature as base-58 string
-    pub until: Option<String>,  // Signature as base-58 string
-    pub limit: Option<usize>,
-    #[serde(flatten)]
-    pub commitment: Option<CommitmentConfig>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SignatureInfo {
-    pub signature: String,
-    pub slot: Slot,
-    pub err: Option<TransactionError>,
-    pub memo: Option<String>,
-    pub block_time: Option<i64>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RpcSlotConfig {
-    #[serde(flatten)]
-    pub commitment: Option<CommitmentConfig>,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RpcTransactionConfig {
-    pub encoding: Option<TransactionEncoding>,
-    #[serde(flatten)]
-    pub commitment: Option<CommitmentConfig>,
-}
-
-/// A duplicate representation of an Instruction for pretty JSON serialization
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", untagged)]
-pub enum UiInstruction {
-    Compiled(UiCompiledInstruction),
-    Parsed(UiParsedInstruction),
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct ParsedInstruction {
-    pub program: String,
-    pub program_id: String,
-    pub parsed: Value,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", untagged)]
-pub enum UiParsedInstruction {
-    Parsed(ParsedInstruction),
-    PartiallyDecoded(UiPartiallyDecodedInstruction),
-}
-
-/// A partially decoded CompiledInstruction that includes explicit account addresses
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UiPartiallyDecodedInstruction {
-    pub program_id: String,
-    pub accounts: Vec<String>,
-    pub data: String,
-}
-
-/// A duplicate representation of a CompiledInstruction for pretty JSON serialization
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UiCompiledInstruction {
-    pub program_id_index: u8,
-    pub accounts: Vec<u8>,
-    pub data: String,
-}
-
-impl From<&CompiledInstruction> for UiCompiledInstruction {
-    fn from(instruction: &CompiledInstruction) -> Self {
-        Self {
-            program_id_index: instruction.program_id_index,
-            accounts: instruction.accounts.clone(),
-            data: bs58::encode(instruction.data.clone()).into_string(),
-        }
-    }
-}
-
-/// A duplicate representation of a Message, in raw format, for pretty JSON serialization
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UiRawMessage {
-    pub header: MessageHeader,
-    pub account_keys: Vec<String>,
-    pub recent_blockhash: String,
-    pub instructions: Vec<UiCompiledInstruction>,
-}
-
-/// A duplicate representation of a Message, in parsed format, for pretty JSON serialization
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UiParsedMessage {
-    pub account_keys: Vec<ParsedAccount>,
-    pub recent_blockhash: String,
-    pub instructions: Vec<UiInstruction>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", untagged)]
-pub enum UiMessage {
-    Parsed(UiParsedMessage),
-    Raw(UiRawMessage),
-}
-
-/// A duplicate representation of a Transaction for pretty JSON serialization
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UiTransaction {
-    pub signatures: Vec<String>,
-    pub message: UiMessage,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", untagged)]
-pub enum EncodedTransaction {
-    LegacyBinary(String), // Old way of expressing base-58, retained for RPC backwards compatibility
-    Binary(String, TransactionEncoding),
-    Json(UiTransaction),
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EncodedTransactionWithStatusMeta {
-    pub transaction: EncodedTransaction,
-    pub meta: Option<UiTransactionStatusMeta>,
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EncodedConfirmedTransaction {
-    pub slot: Slot,
-    #[serde(flatten)]
-    pub transaction: EncodedTransactionWithStatusMeta,
-    pub block_time: Option<UnixTimestamp>,
-}
-
-/// A duplicate representation of TransactionStatusMeta with `err` field
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UiTransactionStatusMeta {
-    pub err: Option<TransactionError>,
-    pub status: transaction::Result<()>, // This field is deprecated.  See https://github.com/solana-labs/solana/issues/9302
-    pub fee: u64,
-    pub pre_balances: Vec<u64>,
-    pub post_balances: Vec<u64>,
-    pub inner_instructions: Option<Vec<UiInnerInstructions>>,
-    pub log_messages: Option<Vec<String>>,
-    pub pre_token_balances: Option<Vec<UiTransactionTokenBalance>>,
-    pub post_token_balances: Option<Vec<UiTransactionTokenBalance>>,
-    pub rewards: Option<Rewards>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UiInnerInstructions {
-    /// Transaction instruction index
-    pub index: u8,
-    /// List of inner instructions
-    pub instructions: Vec<UiInstruction>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UiTransactionTokenBalance {
-    pub account_index: u8,
-    pub mint: String,
-    pub ui_token_amount: UiTokenAmount,
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
-pub enum RewardType {
-    Fee,
-    Rent,
-    Staking,
-    Voting,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Reward {
-    pub pubkey: String,
-    pub lamports: i64,
-    pub post_balance: u64, // Account balance in lamports after `lamports` was applied
-    pub reward_type: Option<RewardType>,
-    pub commission: Option<u8>, // Vote account commission when the reward was credited, only present for voting and staking rewards
-}
-
-pub type StringAmount = String;
-pub type StringDecimals = String;
-pub type Rewards = Vec<Reward>;
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct UiTokenAmount {
-    pub ui_amount: Option<f64>,
-    pub decimals: u8,
-    pub amount: StringAmount,
-    pub ui_amount_string: StringDecimals,
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RpcSendTransactionConfig {
-    #[serde(default)]
-    pub skip_preflight: bool,
-    pub preflight_commitment: Option<CommitmentLevel>,
-    pub encoding: Option<TransactionEncoding>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RpcSimulateTransactionAccountsConfig {
-    pub encoding: Option<UiAccountEncoding>,
-    pub addresses: Vec<String>,
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RpcSimulateTransactionConfig {
-    #[serde(default)]
-    pub sig_verify: bool,
-    #[serde(default)]
-    pub replace_recent_blockhash: bool,
-    #[serde(flatten)]
-    pub commitment: Option<CommitmentConfig>,
-    pub encoding: Option<TransactionEncoding>,
-    pub accounts: Option<RpcSimulateTransactionAccountsConfig>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct RpcSimulateTransactionResult {
-    pub err: Option<TransactionError>,
-    pub logs: Option<Vec<String>>,
-    pub accounts: Option<Vec<Option<UiAccount>>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RpcResponseContext {
-    pub slot: Slot,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RpcResponse<T> {
-    pub context: RpcResponseContext,
-    pub value: T,
-}
-
-#[async_trait(?Send)]
-pub trait Client {
-    fn default_commitment_level(&self) -> CommitmentLevel;
-
-    fn set_default_commitment_level(&self, level: CommitmentLevel);
-
-    async fn get_account_info(
-        &self,
-        account: Pubkey,
-        cfg: Option<RpcAccountInfoConfig>,
-    ) -> Result<Account, ClientError>;
-
-    async fn get_program_accounts(
-        &self,
-        program: Pubkey,
-        cfg: Option<RpcProgramAccountsConfig>,
-    ) -> Result<Vec<Account>, ClientError>;
-
-    async fn get_multiple_accounts(
-        &self,
-        accounts: &[Pubkey],
-        cfg: Option<RpcAccountInfoConfig>,
-    ) -> Result<Vec<Account>, ClientError>;
-
-    async fn get_signature_statuses(
-        &self,
-        signatures: &[Signature],
-        cfg: Option<RpcSignatureStatusConfig>,
-    ) -> Result<Vec<Option<TransactionStatus>>, ClientError>;
-
-    async fn get_signatures_for_address(
-        &self,
-        address: &Pubkey,
-        cfg: Option<RpcSignaturesForAddressConfig>,
-    ) -> Result<Vec<SignatureInfo>, ClientError>;
-
-    async fn get_slot(&self, cfg: Option<RpcSlotConfig>) -> Result<Slot, ClientError>;
-
-    async fn get_transaction(
-        &self,
-        signature: Signature,
-        cfg: Option<RpcTransactionConfig>,
-    ) -> Result<Option<EncodedConfirmedTransaction>, ClientError>;
-
-    async fn get_recent_blockhash(&self) -> Result<Hash, ClientError>;
-
-    async fn request_airdrop(
-        &self,
-        pubkey: &Pubkey,
-        lamports: u64,
-        commitment: Option<CommitmentConfig>,
-    ) -> Result<Signature, ClientError>;
-
-    async fn send_transaction(&self, transaction: &Transaction) -> Result<Signature, ClientError> {
-        self.send_transaction_ex(transaction, false, self.default_commitment_level())
-            .await
-    }
-
-    async fn send_transaction_ex(
-        &self,
-        transaction: &Transaction,
-        skip_preflight: bool,
-        preflight_commitment: CommitmentLevel,
-    ) -> Result<Signature, ClientError>;
-
-    async fn simulate_transaction(
-        &self,
-        transaction: &Transaction,
-        sig_verify: bool,
-        commitment: CommitmentLevel,
-        replace_recent_blockhash: bool,
-    ) -> Result<RpcSimulateTransactionResult, ClientError>;
 }

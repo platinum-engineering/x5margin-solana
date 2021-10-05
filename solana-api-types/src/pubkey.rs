@@ -1,10 +1,11 @@
+#[cfg(feature = "offchain")]
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
     str::FromStr,
 };
 
-use serde::{Deserialize, Serialize};
+#[cfg(feature = "offchain")]
 use thiserror::Error;
 
 /// maximum length of derived `Pubkey` seed
@@ -12,10 +13,11 @@ pub const MAX_SEED_LEN: usize = 32;
 /// Maximum number of seeds
 pub const MAX_SEEDS: usize = 16;
 
-const PDA_MARKER: &[u8; 21] = b"ProgramDerivedAddress";
+pub const PDA_MARKER: &[u8; 21] = b"ProgramDerivedAddress";
 
 #[repr(transparent)]
-#[derive(Serialize, Deserialize, Clone, Copy, Default, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Copy, Default, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "offchain", derive(Serialize, Deserialize))]
 pub struct Pubkey([u8; 32]);
 
 impl Pubkey {
@@ -27,7 +29,7 @@ impl Pubkey {
         &self.0
     }
 
-    #[cfg(feature = "extended")]
+    #[cfg(feature = "offchain")]
     pub fn new_unique() -> Self {
         use std::sync::atomic::{AtomicU64, Ordering};
         static I: AtomicU64 = AtomicU64::new(1);
@@ -38,7 +40,7 @@ impl Pubkey {
         Self::new(b)
     }
 
-    #[cfg(any(feature = "extended", target_arch = "bpf"))]
+    #[cfg(any(feature = "crypto", target_arch = "bpf"))]
     pub fn create_program_address(seeds: &[&[u8]], program_id: &Pubkey) -> Option<Pubkey> {
         if seeds.len() > MAX_SEEDS {
             return None;
@@ -93,7 +95,7 @@ impl Pubkey {
         }
     }
 
-    #[cfg(feature = "extended")]
+    #[cfg(feature = "crypto")]
     pub fn is_on_curve(&self) -> bool {
         curve25519_dalek::edwards::CompressedEdwardsY::from_slice(self.0.as_ref())
             .decompress()
@@ -101,12 +103,14 @@ impl Pubkey {
     }
 }
 
+#[cfg(feature = "debug")]
 impl fmt::Debug for Pubkey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", bs58::encode(self.0).into_string())
     }
 }
 
+#[cfg(feature = "debug")]
 impl fmt::Display for Pubkey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", bs58::encode(self.0).into_string())
@@ -119,7 +123,8 @@ impl AsRef<[u8]> for Pubkey {
     }
 }
 
-#[derive(Error, Debug, Serialize, Clone, PartialEq)]
+#[cfg(feature = "debug")]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum ParsePubkeyError {
     #[error("String is the wrong size")]
     WrongSize,
@@ -128,8 +133,9 @@ pub enum ParsePubkeyError {
 }
 
 /// Maximum string length of a base58 encoded pubkey
-const MAX_BASE58_LEN: usize = 44;
+pub const MAX_BASE58_LEN: usize = 44;
 
+#[cfg(feature = "debug")]
 impl FromStr for Pubkey {
     type Err = ParsePubkeyError;
 
@@ -148,6 +154,7 @@ impl FromStr for Pubkey {
     }
 }
 
+#[cfg(feature = "debug")]
 impl TryFrom<&str> for Pubkey {
     type Error = ParsePubkeyError;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
