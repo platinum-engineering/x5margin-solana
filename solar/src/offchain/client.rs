@@ -8,7 +8,7 @@ use dashmap::DashMap;
 use futures::StreamExt;
 use futures::{channel::oneshot, SinkExt};
 use serde_json::{json, Value};
-use solana_api_types::{Client as BasicClient, Hash, Pubkey, Signature, Transaction};
+use solana_api_types::{client::Client as BasicClient, Hash, Pubkey, Signature, Transaction};
 
 use url::Url;
 

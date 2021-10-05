@@ -1,5 +1,3 @@
-use thiserror::Error;
-
 pub type ProgramResult = Result<(), ProgramError>;
 
 /// Reasons the program may fail

@@ -122,6 +122,14 @@ impl CommitmentLevel {
             _ => return None,
         })
     }
+
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            CommitmentLevel::Processed => "processed",
+            CommitmentLevel::Confirmed => "confirmed",
+            CommitmentLevel::Finalized => "finalized",
+        }
+    }
 }
 
 /// Account metadata used to define Instructions

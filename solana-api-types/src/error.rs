@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -21,6 +22,20 @@ pub enum ClientError {
         #[source]
         source: anyhow::Error,
     },
+}
+
+impl ClientError {
+    pub fn transport<E: std::error::Error + Send + Sync + 'static>(error: E) -> Self {
+        Self::Transport {
+            source: anyhow!(error),
+        }
+    }
+
+    pub fn parsing<E: std::error::Error + Send + Sync + 'static>(error: E) -> Self {
+        Self::Parsing {
+            source: anyhow!(error),
+        }
+    }
 }
 
 /// Errors that can occur when parsing Solana API types from a JSON object.

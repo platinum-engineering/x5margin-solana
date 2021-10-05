@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use solana_api_types::Account;
 
 use super::{AccountBackend, AccountFields, AccountFieldsMut, Environment};
@@ -73,3 +75,15 @@ impl AccountBackend for Box<Account> {
     }
 }
 
+impl AccountBackend for Arc<Account> {
+    type Impl = Account;
+    type Env = Offchain;
+
+    fn backend(&self) -> &Self::Impl {
+        self
+    }
+
+    fn backend_mut(&mut self) -> &mut Self::Impl {
+        unimplemented!("cannot acquire mutable reference to Arc<Account>")
+    }
+}

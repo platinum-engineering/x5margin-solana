@@ -4,48 +4,63 @@ name = "solar"
 version = "0.1.0"
 
 [features]
+sol-mem-intrinsics = []
+
 onchain = ["solana-api-types/onchain"]
-offchain = ["dashmap", "url", "log", "anyhow", "getrandom", "async-std"]
+
+offchain = [
+    "solana-api-types/offchain",
+    "lazy_static",
+    "futures",
+    "serde",
+    "serde_json",
+    "getrandom",
+    "dashmap",
+    "url",
+    "log",
+    "anyhow",
+    "async-std",
+]
+
 wasm = ["getrandom/js", "ws_stream_wasm"]
 native = ["async-tungstenite"]
-runtime-test = ["solana-program-test", "test"]
-sol-mem-intrinsics = []
+
 test = ["solana-sdk", "solana-program"]
+runtime-test = ["solana-program-test", "test"]
 
 [dependencies]
-async-trait = "0.1.51"
+
+# universal dependencies
 az = "1.1.1"
-borsh = "0.9.1"
 byteorder = "1.4.3"
-fixed = {version = "1.9.0", features = ["num-traits"]}
+fixed = { version = "1.9.0", features = ["num-traits"] }
 itoap = "1.0.1"
-lazy_static = "1.4"
 num-traits = "0.2.14"
-parity-scale-codec = {version = "1.3.7", features = ["derive"]}
-serde = "1.0"
-serde_json = "1.0.64"
+parity-scale-codec = { version = "1.3.7", features = ["derive"] }
 static_assertions = "1.1.0"
-strum = {version = "0.21", features = ["derive"]}
+strum = { version = "0.21", features = ["derive"] }
 
-futures = "0.3"
+solana-api-types = { path = "../solana-api-types", default-features = false }
+solar-macros = { path = "../solar-macros" }
 
-solana-api-types = {path = "../solana-api-types", default-features = false}
-solar-macros = {path = "../solar-macros"}
-
-# offchain & testing dependencies
-solana-program = {version = "= 1.7.2", optional = true}
-solana-program-test = {version = "= 1.7.2", optional = true}
-solana-sdk = {version = "= 1.7.2", optional = true}
-getrandom = {version = "0.2.3", optional = true}
-
+# offchain dependencies
+lazy_static = { version = "1.4", optional = true }
+futures = { version = "0.3", optional = true }
+async-trait = { version = "0.1.51", optional = true }
+serde = { version = "1.0", optional = true }
+serde_json = { version = "1.0", optional = true }
+getrandom = { version = "0.2.3", optional = true }
 dashmap = { version = "4", optional = true }
 url = { version = "2.2.2", optional = true }
 log = { version = "0.4", optional = true }
 anyhow = { version = "1", optional = true }
-
 async-std = { version = "1.10", optional = true, features = ["unstable"] }
-async-tungstenite = { version = "0.15", features = ["async-std-runtime"], optional = true }
+async-tungstenite = { version = "0.15", features = [
+    "async-std-runtime",
+], optional = true }
 ws_stream_wasm = { version = "0.7.3", optional = true }
 
-[dev-dependencies]
-solana-sdk = "= 1.7.2"
+# testing dependencies
+solana-program = { version = "= 1.7.2", optional = true }
+solana-program-test = { version = "= 1.7.2", optional = true }
+solana-sdk = { version = "= 1.7.2", optional = true }

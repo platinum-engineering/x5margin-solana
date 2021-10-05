@@ -1,10 +1,17 @@
 use super::*;
 use async_trait::async_trait;
+use serde_json::{json, Value};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AccountSlice {
     pub offset: usize,
     pub length: usize,
+}
+
+impl AccountSlice {
+    pub fn to_json_value(&self) -> Value {
+        json!({"offset": self.offset, "length": self.length})
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -23,6 +30,17 @@ pub enum AccountFilter<'a> {
     Memcmp(MemcmpFilter<'a>),
 }
 
+impl<'a> AccountFilter<'a> {
+    pub fn to_json_value(&self) -> Value {
+        match self {
+            AccountFilter::DataSize(length) => json!({ "dataSize": length }),
+            AccountFilter::Memcmp(MemcmpFilter { offset, bytes }) => {
+                json!({"memcmp": {"offset": offset, "bytes": bs58::encode(bytes).into_string()}})
+            }
+        }
+    }
+}
+
 #[ async_trait(?Send)]
 pub trait Client {
     /// Get the default commitment level configured for this [`Client`] instance.
@@ -34,15 +52,15 @@ pub trait Client {
     /// Get the provided account, optionally resized to the provided offset and length.
     async fn get_account_info(
         &self,
-        account: Pubkey,
+        account: &Pubkey,
         slice: Option<AccountSlice>,
         commitment: Option<CommitmentLevel>,
-    ) -> Result<Account, ClientError>;
+    ) -> Result<Option<Account>, ClientError>;
 
     /// Get all accounts owned by the provided program, optionally filtered and sliced.
     async fn get_program_accounts_ex(
         &self,
-        program: Pubkey,
+        program: &Pubkey,
         filters: Option<&[AccountFilter]>,
         slice: Option<AccountSlice>,
         commitment: Option<CommitmentLevel>,
@@ -54,7 +72,7 @@ pub trait Client {
         accounts: &[Pubkey],
         slice: Option<AccountSlice>,
         commitment: Option<CommitmentLevel>,
-    ) -> Result<Vec<Account>, ClientError>;
+    ) -> Result<Vec<Option<Account>>, ClientError>;
 
     /// Gets the statuses of multiple transactions, finding them by their signatures.
     ///

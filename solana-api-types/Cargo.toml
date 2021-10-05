@@ -46,7 +46,6 @@ runtime-test = [
 
 default = ["offchain", "onchain", "crypto", "debug"]
 
-
 [dependencies]
 solar-macros = {path = "../solar-macros"}
 
