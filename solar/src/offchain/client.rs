@@ -302,7 +302,7 @@ impl<T: BasicClient + Send + Sync + 'static> SolanaClientInner<T> {
         recent_blockhash_interval: Duration,
     ) -> anyhow::Result<Self> {
         let client = Arc::new(client);
-        let hash = client.get_recent_blockhash().await?;
+        let hash = client.get_recent_blockhash(None).await?;
         let slot = client.get_slot(None).await?;
         let recent_blockhash = Arc::new(RwLock::new(hash));
 
@@ -324,7 +324,7 @@ impl<T: BasicClient + Send + Sync + 'static> SolanaClientInner<T> {
             let recent_blockhash = Arc::clone(&recent_blockhash);
             async_std::task::spawn_local(async move {
                 loop {
-                    if let Ok(hash) = client.get_recent_blockhash().await {
+                    if let Ok(hash) = client.get_recent_blockhash(None).await {
                         {
                             let mut old_hash = recent_blockhash.write().unwrap();
                             *old_hash = hash;

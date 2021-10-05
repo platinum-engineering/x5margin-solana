@@ -14,7 +14,6 @@ pub enum AccessKind {
     Write,
 }
 
-#[derive(Debug)]
 pub struct AccountDef {
     name: Ident,
     access: AccessKind,

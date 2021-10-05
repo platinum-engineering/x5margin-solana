@@ -65,8 +65,8 @@ impl fmt::Display for Hash {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[cfg(feature = "offchain")]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ParseHashError {
     #[error("string decoded to wrong size for hash")]
     WrongSize,

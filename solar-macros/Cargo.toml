@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
-syn = "1.0.73"
+syn = { version = "1.0.73", features = ["full"] }
 proc-macro2 = { version = "1.0.24", features = ["nightly"] }
 quote = "1.0"
 bs58 = "0.4.0"
