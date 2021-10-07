@@ -3,6 +3,7 @@ use anchor_client::{
         commitment_config::CommitmentConfig,
         pubkey::Pubkey,
         signature::{read_keypair_file, Signer},
+        system_instruction,
         sysvar::clock,
     },
     Client,
@@ -65,9 +66,6 @@ impl DefaultPath for Payer {
     }
 }
 
-#[derive(Debug)]
-struct Any;
-
 #[derive(Debug, StructOpt)]
 struct Opts {
     #[structopt(long)]
@@ -92,11 +90,11 @@ enum Command {
     /// Initialize stake pool.
     Initialize {
         #[structopt(long)]
-        administrator: CliKeypair<Any>,
+        administrator: CliKeypair<()>,
         #[structopt(long)]
         pool_authority: Pubkey,
         #[structopt(long)]
-        pool: Pubkey,
+        pool: CliKeypair<()>,
         #[structopt(long)]
         stake_mint: Pubkey,
         #[structopt(long)]
@@ -149,13 +147,24 @@ fn main() -> Result<()> {
         } => {
             let administrator = read_keypair_file(administrator.as_ref())
                 .map_err(|err| anyhow!("failed to read keypair: {}", err))?;
+            let pool = read_keypair_file(pool.as_ref())
+                .map_err(|err| anyhow!("failed to read keypair: {}", err))?;
 
             let r = pool_client
                 .request()
+                .instruction(system_instruction::create_account(
+                    &pool_client.payer(),
+                    &pool.pubkey(),
+                    pool_client
+                        .rpc()
+                        .get_minimum_balance_for_rent_exemption(500)?,
+                    500,
+                    &pool_client.id(),
+                ))
                 .accounts(pool::accounts::InitializePool {
                     administrator_authority: administrator.pubkey(),
                     pool_authority,
-                    pool,
+                    pool: pool.pubkey(),
                     stake_mint,
                     stake_vault,
                     clock: clock::ID,
@@ -168,6 +177,7 @@ fn main() -> Result<()> {
                     target_amount,
                 })
                 .signer(&administrator)
+                .signer(&pool)
                 .send()?;
         }
     }
