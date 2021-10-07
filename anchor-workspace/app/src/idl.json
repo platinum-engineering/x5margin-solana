@@ -13,7 +13,7 @@
         {
           "name": "poolAuthority",
           "isMut": false,
-          "isSigner": true
+          "isSigner": false
         },
         {
           "name": "pool",

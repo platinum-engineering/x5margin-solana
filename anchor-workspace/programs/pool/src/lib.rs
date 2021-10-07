@@ -321,7 +321,6 @@ pub mod pool {
 pub struct InitializePool<'info> {
     #[account(signer)]
     administrator_authority: AccountInfo<'info>,
-    #[account(signer)]
     pool_authority: AccountInfo<'info>,
     #[account(zero)]
     pool: Account<'info, Pool>,
