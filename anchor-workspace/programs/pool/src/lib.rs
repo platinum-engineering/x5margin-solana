@@ -167,6 +167,7 @@ pub mod pool {
 
         pool.stake_acquired_amount += transfer_amount;
         ticket.staked_amount += transfer_amount;
+        ticket.authority = ctx.accounts.source_authority.key();
 
         Ok(())
     }

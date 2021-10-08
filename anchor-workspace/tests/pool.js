@@ -1,49 +1,31 @@
 const anchor = require('@project-serum/anchor');
 const assert = require("assert");
-const spl = require("@solana/spl-token");
-const TokenInstructions = require("@project-serum/serum").TokenInstructions;
-
-const TOKEN_PROGRAM_ID = new anchor.web3.PublicKey(
-  TokenInstructions.TOKEN_PROGRAM_ID.toString()
-);
-
-async function createMint(provider, authority) {
-  if (authority === undefined) {
-    authority = provider.wallet.publicKey;
-  }
-  const mint = await spl.Token.createMint(
-    provider.connection,
-    provider.wallet.payer,
-    authority,
-    null,
-    6,
-    TOKEN_PROGRAM_ID
-  );
-  return mint;
-}
-
-async function createTokenAccount(provider, mint, owner) {
-  const token = new spl.Token(
-    provider.connection,
-    mint,
-    TOKEN_PROGRAM_ID,
-    provider.wallet.payer
-  );
-  let vault = await token.createAccount(owner);
-  return vault;
-}
+const utils = require("../web3/pool/utils");
+const poolClient = require("../web3/pool/index");
 
 describe('pool', () => {
   const provider = anchor.Provider.env();
   anchor.setProvider(provider);
   const program = anchor.workspace.Pool;
 
+  // Stuff to save between tests.
+  let globals = {
+    administrator: undefined,
+    pool: undefined,
+    poolAuthority: undefined,
+    nonce: undefined,
+    stakeMintToken: undefined,
+    stakeVault: undefined,
+    ticket: undefined,
+    userWallet: undefined,
+  };
+
   it('Initializes the pool', async () => {
     const administrator = anchor.web3.Keypair.generate();
     const pool = anchor.web3.Keypair.generate();
 
-    const stake_mint_token = await createMint(provider);
-    const stakeMint = stake_mint_token.publicKey;
+    const stakeMintToken = await utils.createMint(provider);
+    const stakeMint = stakeMintToken.publicKey;
 
     const [poolAuthority, nonce] = await anchor.web3.PublicKey.findProgramAddress(
       [
@@ -53,7 +35,7 @@ describe('pool', () => {
       program.programId
     );
 
-    const stakeVault = await createTokenAccount(
+    const stakeVault = await utils.createTokenAccount(
       provider,
       stakeMint,
       poolAuthority
@@ -88,26 +70,60 @@ describe('pool', () => {
     const poolAccount = await program.account.pool.fetch(pool.publicKey);
     console.log('Data: ', poolAccount);
 
-    assert(poolAccount.topupDuration.toNumber() === topupDuration.toNumber());
-    assert(poolAccount.lockupDuration.toNumber() === lockupDuration.toNumber());
-    assert(poolAccount.stakeTargetAmount.toNumber() === targetAmount.toNumber());
-    assert(poolAccount.rewardAmount.toNumber() === rewardAmount.toNumber());
+    assert.ok(poolAccount.topupDuration.eq(topupDuration));
+    assert.ok(poolAccount.lockupDuration.eq(lockupDuration));
+    assert.ok(poolAccount.stakeTargetAmount.eq(targetAmount));
+    assert.ok(poolAccount.rewardAmount.eq(rewardAmount));
+
+    globals.administrator = administrator;
+    globals.pool = pool;
+    globals.poolAuthority = poolAuthority;
+    globals.nonce = nonce;
+    globals.stakeMintToken = stakeMintToken;
+    globals.stakeVault = stakeVault;
   });
 
-  // it("Updates the previously created account", async () => {
-  //   const baseAccount = _baseAccount;
+  it('Adds stake to the pool', async () => {
+    const amount = new anchor.BN(100);
+    const ticket = anchor.web3.Keypair.generate();
 
-  //   await program.rpc.update("Some new data", {
-  //     accounts: {
-  //       baseAccount: baseAccount.publicKey,
-  //     }
-  //   });
+    const sourceWallet = await utils.createTokenAccount(
+      provider,
+      globals.stakeMintToken.publicKey,
+      provider.wallet.publicKey,
+    );
 
-  //   const account = await program.account.baseAccount.fetch(baseAccount.publicKey);
-  //   console.log("Updated data: ", account.data);
-  //   assert.ok(account.data === "Some new data");
-  //   console.log("all account data: ", account);
-  //   console.log("all data: ", account.dataList);
-  //   assert.ok(account.dataList.length === 2);
-  // });
+    await globals.stakeMintToken.mintTo(
+      sourceWallet,
+      provider.wallet.publicKey,
+      [],
+      amount.toString(),
+    );
+
+    await poolClient.addStake(amount, ticket, {
+      pool: globals.pool.publicKey,
+      stakeVault: globals.stakeVault,
+      sourceAuthority: provider.wallet.publicKey,
+      sourceWallet,
+    });
+
+    const poolAccount = await program.account.pool.fetch(globals.pool.publicKey);
+    console.log('Data: ', poolAccount);
+
+    assert(poolAccount.stakeAcquiredAmount.eq(amount));
+
+    const ticketAccount = await program.account.ticket.fetch(ticket.publicKey);
+    console.log('Data: ', ticketAccount);
+
+    assert.ok(ticketAccount.stakedAmount.eq(amount));
+    assert.ok(ticketAccount.authority.equals(provider.wallet.publicKey));
+
+    globals.ticket = ticket;
+    globals.userWallet = sourceWallet;
+  });
+
+  // todo: remove stake
+  // todo: claim reward
+  // todo: add reward
+  // todo: get pools
 });
