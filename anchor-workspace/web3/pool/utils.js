@@ -1,6 +1,7 @@
-const anchor = require('@project-serum/anchor');
 const spl = require("@solana/spl-token");
+const anchor = require('@project-serum/anchor');
 const TokenInstructions = require("@project-serum/serum").TokenInstructions;
+const serumCmn = require('@project-serum/common');
 
 const TOKEN_PROGRAM_ID = new anchor.web3.PublicKey(
   TokenInstructions.TOKEN_PROGRAM_ID.toString()
@@ -32,8 +33,18 @@ async function createTokenAccount(provider, mint, owner) {
   return vault;
 }
 
+async function getTokenAccount(provider, addr) {
+  return await serumCmn.getTokenAccount(provider, addr);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 module.exports = {
     createMint,
     createTokenAccount,
+    getTokenAccount,
+    sleep,
     TOKEN_PROGRAM_ID,
 };
