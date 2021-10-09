@@ -6,6 +6,7 @@ use az::CheckedAs;
 declare_id!("BHfLU4UsBdxBZk56GjpGAXkzu8B7JdMitGa9A1VTMmva");
 
 #[account]
+#[derive(Debug)]
 pub struct Pool {
     pool_authority: Pubkey,
     administrator_authority: Pubkey,

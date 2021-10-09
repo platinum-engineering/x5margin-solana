@@ -36,7 +36,7 @@ jobs:
         with:
           working-directory: ./program-so
       - run: |
-          sh -c "$(curl -sSfL https://release.solana.com/v1.7.2/install)"
+          sh -c "$(curl -sSfL https://release.solana.com/v1.7.14/install)"
           export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
           solana --version
           cargo build-bpf

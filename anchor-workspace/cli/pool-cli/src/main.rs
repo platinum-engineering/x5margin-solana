@@ -110,6 +110,11 @@ enum Command {
         #[structopt(long)]
         target_amount: u64,
     },
+    /// Pool account data.
+    PoolInfo {
+        #[structopt(long)]
+        pool: Pubkey,
+    },
 }
 
 fn main() -> Result<()> {
@@ -179,6 +184,12 @@ fn main() -> Result<()> {
                 .signer(&administrator)
                 .signer(&pool)
                 .send()?;
+
+            println!("Result:\n{}", r);
+        }
+        Command::PoolInfo { pool } => {
+            let pool: pool::Pool = pool_client.account(pool)?;
+            println!("{:#?}", pool);
         }
     }
 
