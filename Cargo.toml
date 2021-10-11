@@ -15,7 +15,8 @@ members = [
 exclude = [
   "program",
   "program-so",
-  "locker"
+  "locker",
+  "anchor-workspace"
 ]
 
 [profile.bpf-release]

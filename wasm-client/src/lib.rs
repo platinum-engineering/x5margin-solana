@@ -8,15 +8,17 @@ use futures::{Future, TryFutureExt};
 use js_sys::Promise;
 use parity_scale_codec::Encode;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use solar::account::AccountFields;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
 use solana_api_types::{
     Account, AccountMeta, Client, ClientError, ClientErrorKind, EncodedConfirmedTransaction,
     Instruction, Memcmp, MemcmpEncodedBytes, Pubkey, RpcAccountInfoConfig, RpcError, RpcFilterType,
-    RpcKeyedAccount, RpcProgramAccountsConfig, RpcResponse, RpcSendTransactionConfig,
-    RpcSignaturesForAddressConfig, RpcSimulateTransactionConfig, RpcSimulateTransactionResult,
-    Signature, SignatureInfo, Slot, Transaction, TransactionStatus, UiAccount,
+    RpcKeyedAccount, RpcProgramAccountsConfig, RpcRecentBlockhash, RpcResponse,
+    RpcSendTransactionConfig, RpcSignaturesForAddressConfig, RpcSimulateTransactionConfig,
+    RpcSimulateTransactionResult, Signature, SignatureInfo, Signer, Slot, Transaction,
+    TransactionStatus, UiAccount,
 };
 use x5margin_program::data::EntityKind;
 
@@ -138,12 +140,17 @@ impl RawApiClient {
             .send()
             .await?;
 
-        let body = r.bytes().await?;
-        let body: serde_json::Value = serde_json::from_slice(&body)?;
-        log::info!("{}", body);
-        let body: JsonRpcResponse<T> = serde_json::from_value(body)?;
+        match r.error_for_status() {
+            Ok(r) => {
+                let body = r.bytes().await?;
+                let body: serde_json::Value = serde_json::from_slice(&body)?;
+                log::info!("{}", body);
+                let body: JsonRpcResponse<T> = serde_json::from_value(body)?;
 
-        Ok(body.result)
+                Ok(body.result)
+            }
+            Err(err) => Err(ClientErrorKind::from(err).into()),
+        }
     }
 }
 
@@ -350,6 +357,20 @@ impl Client for RawApiClient {
 
         Ok(r.value)
     }
+
+    async fn get_recent_blockhash(
+        &self,
+        commitment: Option<solana_api_types::CommitmentConfig>,
+    ) -> Result<solana_api_types::RpcRecentBlockhash, ClientError> {
+        let r: RpcResponse<RpcRecentBlockhash> = self
+            .mk_request(Request {
+                method: "getRecentBlockhash",
+                params: serde_json::json!([serde_json::to_value(&commitment)?]),
+            })
+            .await?;
+
+        Ok(r.value)
+    }
 }
 
 fn return_promise<T>(fut: impl Future<Output = Result<T, ClientError>> + 'static) -> Promise
@@ -524,6 +545,19 @@ impl ApiClient {
             let r = client
                 .simulate_transaction(transaction.as_ref(), cfg)
                 .await?;
+
+            Ok(r)
+        };
+
+        return_promise(fut)
+    }
+
+    pub fn get_recent_blockhash(&self, commitment: JsValue) -> Promise {
+        let client = self.inner.clone();
+
+        let fut = async move {
+            let commitment = commitment.into_serde()?;
+            let r = client.get_recent_blockhash(commitment).await?;
 
             Ok(r)
         };
@@ -748,6 +782,7 @@ impl PoolClient {
 #[wasm_bindgen]
 pub struct StakePoolEntity {
     entity: x5margin_program::simple_stake::StakePoolEntity<Box<Account>>,
+    program: Pubkey,
 }
 
 impl Serialize for StakePoolEntity {
@@ -766,7 +801,10 @@ impl StakePoolEntity {
     ) -> Result<Self, x5margin_program::error::Error> {
         let stake_pool = x5margin_program::simple_stake::StakePoolEntity::load(program, pool)?;
 
-        Ok(Self { entity: stake_pool })
+        Ok(Self {
+            entity: stake_pool,
+            program: *program,
+        })
     }
 
     pub fn load_ticket(
@@ -776,6 +814,98 @@ impl StakePoolEntity {
         self.entity
             .load_ticket(ticket)
             .map(|entity| StakerTicketEntity { entity })
+    }
+}
+
+#[wasm_bindgen]
+impl StakePoolEntity {
+    pub fn stake(
+        &self,
+        amount: u64,
+        staker_key: Pk,
+        staker_ticket_key: Pk,
+        aux_wallet_key: Pk,
+    ) -> Instr {
+        Instruction {
+            program_id: self.program,
+            accounts: vec![
+                AccountMeta::new_readonly(*solar::spl::ID, false),
+                AccountMeta::new(*self.entity.account().key(), false),
+                AccountMeta::new_readonly(staker_key.to_pubkey(), false),
+                AccountMeta::new(staker_ticket_key.to_pubkey(), false),
+                AccountMeta::new(self.entity.stake_vault, false),
+                AccountMeta::new_readonly(self.entity.administrator_authority, true),
+                AccountMeta::new(aux_wallet_key.to_pubkey(), false),
+            ],
+            data: x5margin_program::Method::Simple(x5margin_program::simple_stake::Method::Stake {
+                amount: amount.into(),
+            })
+            .encode(),
+        }
+        .into()
+    }
+
+    pub fn unstake(&self, amount: u64) -> Instr {
+        Instruction {
+            program_id: self.program,
+            accounts: vec![
+                // TODO: what is administrator key?
+                AccountMeta::new_readonly(self.entity.administrator_authority, false),
+                AccountMeta::new(*self.entity.account().key(), false),
+                AccountMeta::new_readonly(self.entity.stake_mint, false),
+                AccountMeta::new_readonly(self.entity.stake_vault, false),
+            ],
+            data: x5margin_program::Method::Simple(
+                x5margin_program::simple_stake::Method::Unstake {
+                    amount: amount.into(),
+                },
+            )
+            .encode(),
+        }
+        .into()
+    }
+
+    pub fn claim_reward(&self) -> Instr {
+        Instruction {
+            program_id: self.program,
+            accounts: vec![
+                // TODO: what is administrator key?
+                // AccountMeta::new_readonly(self.administrator_key.to_pubkey(), false),
+                AccountMeta::new_readonly(self.entity.administrator_authority, false),
+                AccountMeta::new(*self.entity.account().key(), false),
+                AccountMeta::new_readonly(self.entity.stake_mint, false),
+                AccountMeta::new_readonly(self.entity.stake_vault, false),
+            ],
+            data: x5margin_program::Method::Simple(
+                x5margin_program::simple_stake::Method::ClaimReward,
+            )
+            .encode(),
+        }
+        .into()
+    }
+
+    pub fn max_pool_size(&self) -> u64 {
+        self.entity.stake_target_amount.value()
+    }
+
+    pub fn total_pool_deposits(&self) -> u64 {
+        self.entity.stake_acquired_amount.value()
+    }
+
+    pub fn total_rewards(&self) -> u64 {
+        self.entity.reward_amount.value()
+    }
+
+    pub fn rewards_remaining(&self) -> u64 {
+        self.entity.deposited_reward_amount.value()
+    }
+
+    pub fn start_date(&self) -> i64 {
+        self.entity.genesis.value()
+    }
+
+    pub fn end_date(&self) -> i64 {
+        (self.entity.genesis + self.entity.lockup_duration).value()
     }
 }
 
@@ -824,8 +954,23 @@ impl AsRef<[Instruction]> for Instructions {
 
 #[wasm_bindgen]
 impl Instructions {
-    pub fn push(&mut self, i: Instr) {
+    pub fn new() -> Self {
+        Self { inner: vec![] }
+    }
+
+    pub fn add(&mut self, i: Instr) {
         self.inner.push(i.0);
+    }
+
+    pub fn merge(&mut self, mut is: Instructions) {
+        self.inner.append(&mut is.inner);
+    }
+
+    pub fn to_transaction(&self, payer: Pk) -> Tx {
+        Tx(solana_api_types::Transaction::new_with_payer(
+            &self.inner,
+            Some(&payer.to_pubkey()),
+        ))
     }
 }
 
@@ -874,7 +1019,6 @@ pub struct ProgramAuthority {
     pk: Pk,
 }
 
-#[wasm_bindgen]
 impl ProgramAuthority {
     pub fn new(key: Pk, administrator_key: Pk, program_id: Pk) -> Self {
         let mut salt: u64 = 0;
@@ -926,145 +1070,39 @@ impl CreatePoolArgs {
 }
 
 #[wasm_bindgen]
-pub struct PoolInstructionBuilder {
+pub fn create_pool_instruction(
+    args: CreatePoolArgs,
     pool_key: Pk,
     administrator_key: Pk,
-    program_id: Pk,
     stake_mint_key: Pk,
     stake_vault_key: Pk,
-    authority: ProgramAuthority,
+    program_id: Pk,
+) -> Instr {
+    let authority = ProgramAuthority::new(pool_key, administrator_key, program_id);
+    Instruction {
+        program_id: program_id.to_pubkey(),
+        accounts: vec![
+            AccountMeta::new_readonly(administrator_key.to_pubkey(), false),
+            AccountMeta::new_readonly(authority.pk.to_pubkey(), false),
+            AccountMeta::new(pool_key.to_pubkey(), false),
+            AccountMeta::new_readonly(stake_mint_key.to_pubkey(), false),
+            AccountMeta::new_readonly(stake_vault_key.to_pubkey(), false),
+        ],
+        data: x5margin_program::Method::Simple(x5margin_program::simple_stake::Method::CreatePool(
+            x5margin_program::simple_stake::InitializeArgs {
+                program_authority_salt: authority.salt,
+                lockup_duration: args.lockup_duration.into(),
+                topup_duration: args.topup_duration.into(),
+                reward_amount: args.reward_amount.into(),
+                target_amount: args.target_amount.into(),
+            },
+        ))
+        .encode(),
+    }
+    .into()
 }
 
-#[wasm_bindgen]
-impl PoolInstructionBuilder {
-    pub fn new(
-        pool_key: Pk,
-        administrator_key: Pk,
-        stake_mint_key: Pk,
-        stake_vault_key: Pk,
-        program_id: Pk,
-    ) -> Self {
-        Self {
-            pool_key,
-            administrator_key,
-            program_id,
-            stake_mint_key,
-            stake_vault_key,
-            authority: ProgramAuthority::new(pool_key, administrator_key, program_id),
-        }
-    }
-
-    pub fn create_pool(&self, args: CreatePoolArgs) -> Instr {
-        Instruction {
-            program_id: self.program_id.to_pubkey(),
-            accounts: vec![
-                AccountMeta::new_readonly(self.administrator_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.authority.pk.to_pubkey(), false),
-                AccountMeta::new(self.pool_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.stake_mint_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.stake_vault_key.to_pubkey(), false),
-            ],
-            data: x5margin_program::Method::Simple(
-                x5margin_program::simple_stake::Method::CreatePool(
-                    x5margin_program::simple_stake::InitializeArgs {
-                        program_authority_salt: self.authority.salt,
-                        lockup_duration: args.lockup_duration.into(),
-                        topup_duration: args.topup_duration.into(),
-                        reward_amount: args.reward_amount.into(),
-                        target_amount: args.target_amount.into(),
-                    },
-                ),
-            )
-            .encode(),
-        }
-        .into()
-    }
-
-    pub fn stake(
-        &self,
-        amount: u64,
-        staker_key: Pk,
-        staker_ticket_key: Pk,
-        aux_wallet_key: Pk,
-    ) -> Instr {
-        Instruction {
-            program_id: self.program_id.to_pubkey(),
-            accounts: vec![
-                AccountMeta::new_readonly(*solar::spl::ID, false),
-                AccountMeta::new(self.pool_key.to_pubkey(), false),
-                AccountMeta::new_readonly(staker_key.to_pubkey(), false),
-                AccountMeta::new(staker_ticket_key.to_pubkey(), false),
-                AccountMeta::new(self.stake_vault_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.administrator_key.to_pubkey(), true),
-                AccountMeta::new(aux_wallet_key.to_pubkey(), false),
-            ],
-            data: x5margin_program::Method::Simple(x5margin_program::simple_stake::Method::Stake {
-                amount: amount.into(),
-            })
-            .encode(),
-        }
-        .into()
-    }
-
-    pub fn unstake(&self, amount: u64) -> Instr {
-        Instruction {
-            program_id: self.program_id.to_pubkey(),
-            accounts: vec![
-                AccountMeta::new_readonly(self.administrator_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.authority.pk.to_pubkey(), false),
-                AccountMeta::new(self.pool_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.stake_mint_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.stake_vault_key.to_pubkey(), false),
-            ],
-            data: x5margin_program::Method::Simple(
-                x5margin_program::simple_stake::Method::Unstake {
-                    amount: amount.into(),
-                },
-            )
-            .encode(),
-        }
-        .into()
-    }
-
-    pub fn claim_reward(&self) -> Instr {
-        Instruction {
-            program_id: self.program_id.to_pubkey(),
-            accounts: vec![
-                AccountMeta::new_readonly(self.administrator_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.authority.pk.to_pubkey(), false),
-                AccountMeta::new(self.pool_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.stake_mint_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.stake_vault_key.to_pubkey(), false),
-            ],
-            data: x5margin_program::Method::Simple(
-                x5margin_program::simple_stake::Method::ClaimReward,
-            )
-            .encode(),
-        }
-        .into()
-    }
-
-    pub fn add_reward(&self, amount: u64) -> Instr {
-        Instruction {
-            program_id: self.program_id.to_pubkey(),
-            accounts: vec![
-                AccountMeta::new_readonly(self.administrator_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.authority.pk.to_pubkey(), false),
-                AccountMeta::new(self.pool_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.stake_mint_key.to_pubkey(), false),
-                AccountMeta::new_readonly(self.stake_vault_key.to_pubkey(), false),
-            ],
-            data: x5margin_program::Method::Simple(
-                x5margin_program::simple_stake::Method::AddReward {
-                    amount: amount.into(),
-                },
-            )
-            .encode(),
-        }
-        .into()
-    }
-}
-
+/*
 #[wasm_bindgen]
 pub struct LockerInstructionBuilder {
     program_id: Pk,
@@ -1098,6 +1136,7 @@ impl LockerInstructionBuilder {
         .into()
     }
 }
+*/
 
 #[wasm_bindgen]
 pub struct Hash(solana_api_types::Hash);
@@ -1118,6 +1157,25 @@ impl AsRef<solana_api_types::Keypair> for Keypair {
 }
 
 #[wasm_bindgen]
+impl Keypair {
+    pub fn new() -> Self {
+        Self(solana_api_types::Keypair::new())
+    }
+
+    pub fn pubkey(&self) -> Pk {
+        Pk(self.0.pubkey())
+    }
+
+    pub fn to_base58_string(&self) -> String {
+        self.0.to_base58_string()
+    }
+
+    pub fn from_base58_string(s: &str) -> Self {
+        Self(solana_api_types::Keypair::from_base58_string(s))
+    }
+}
+
+#[wasm_bindgen]
 pub struct Signers(Vec<Keypair>);
 
 #[wasm_bindgen]
@@ -1133,22 +1191,6 @@ impl AsRef<solana_api_types::Transaction> for Tx {
     fn as_ref(&self) -> &solana_api_types::Transaction {
         &self.0
     }
-}
-
-#[wasm_bindgen]
-pub fn transaction_signed_with_payer(
-    instructions: Instructions,
-    payer: Pk,
-    signers: &Signers,
-    recent_blockhash: Hash,
-) -> Tx {
-    Transaction::new_signed_with_payer(
-        instructions.as_ref(),
-        Some(payer.as_ref()),
-        &signers.0,
-        recent_blockhash.into_inner(),
-    )
-    .into()
 }
 
 #[wasm_bindgen]

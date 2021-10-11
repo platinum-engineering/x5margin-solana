@@ -616,6 +616,20 @@ pub struct RpcSimulateTransactionResult {
     pub accounts: Option<Vec<Option<UiAccount>>>,
 }
 
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct FeeCalculator {
+    // The current cost of a signature  This amount may increase/decrease over time based on
+    // cluster processing load.
+    pub lamports_per_signature: u64,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
+pub struct RpcRecentBlockhash {
+    pub blockhash: Hash,
+    pub fee_calculator: FeeCalculator,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RpcResponseContext {
     pub slot: Slot,
@@ -695,4 +709,10 @@ pub trait Client {
         transaction: &Transaction,
         cfg: RpcSimulateTransactionConfig,
     ) -> Result<RpcSimulateTransactionResult, ClientError>;
+
+    /// https://docs.solana.com/developing/clients/jsonrpc-api#getrecentblockhash
+    async fn get_recent_blockhash(
+        &self,
+        commitment: Option<CommitmentConfig>,
+    ) -> Result<RpcRecentBlockhash, ClientError>;
 }

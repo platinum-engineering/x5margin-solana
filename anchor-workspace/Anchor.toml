@@ -1,0 +1,15 @@
+[programs.localnet]
+pool = "BHfLU4UsBdxBZk56GjpGAXkzu8B7JdMitGa9A1VTMmva"
+
+[programs.devnet]
+pool = "BHfLU4UsBdxBZk56GjpGAXkzu8B7JdMitGa9A1VTMmva"
+
+[registry]
+url = "https://anchor.projectserum.com"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "mocha -t 1000000 tests/"

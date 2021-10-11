@@ -1,0 +1,391 @@
+{
+  "version": "0.0.0",
+  "name": "pool",
+  "instructions": [
+    {
+      "name": "initializePool",
+      "accounts": [
+        {
+          "name": "administratorAuthority",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "poolAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "pool",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "stakeMint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "stakeVault",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "clock",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "nonce",
+          "type": "u8"
+        },
+        {
+          "name": "topupDuration",
+          "type": "i64"
+        },
+        {
+          "name": "lockupDuration",
+          "type": "i64"
+        },
+        {
+          "name": "targetAmount",
+          "type": "u64"
+        },
+        {
+          "name": "rewardAmount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "addStake",
+      "accounts": [
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "pool",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "ticket",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "stakeVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "sourceAuthority",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "sourceWallet",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "clock",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "removeStake",
+      "accounts": [
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "pool",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "staker",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "ticket",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "poolAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "stakeVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "targetWallet",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "clock",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "claimReward",
+      "accounts": [
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "pool",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "staker",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "ticket",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "poolAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "stakeVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "targetWallet",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "clock",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "addReward",
+      "accounts": [
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "pool",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "stakeVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "sourceAuthority",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "sourceWallet",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "clock",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Pool",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "poolAuthority",
+            "type": "publicKey"
+          },
+          {
+            "name": "administratorAuthority",
+            "type": "publicKey"
+          },
+          {
+            "name": "nonce",
+            "type": "u8"
+          },
+          {
+            "name": "genesis",
+            "type": "i64"
+          },
+          {
+            "name": "topupDuration",
+            "type": "i64"
+          },
+          {
+            "name": "lockupDuration",
+            "type": "i64"
+          },
+          {
+            "name": "stakeAcquiredAmount",
+            "type": "u64"
+          },
+          {
+            "name": "stakeTargetAmount",
+            "type": "u64"
+          },
+          {
+            "name": "rewardAmount",
+            "type": "u64"
+          },
+          {
+            "name": "depositedRewardAmount",
+            "type": "u64"
+          },
+          {
+            "name": "stakeMint",
+            "type": "publicKey"
+          },
+          {
+            "name": "stakeVault",
+            "type": "publicKey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Ticket",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "publicKey"
+          },
+          {
+            "name": "stakedAmount",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ],
+  "errors": [
+    {
+      "code": 300,
+      "name": "InvalidNonce",
+      "msg": "Given nonce is invalid"
+    },
+    {
+      "code": 301,
+      "name": "InvalidAuthority",
+      "msg": "Given authority does not match expected one"
+    },
+    {
+      "code": 302,
+      "name": "TopupLongerThanLockup",
+      "msg": "Given topup duration lasts longer than lockup duration"
+    },
+    {
+      "code": 303,
+      "name": "NotEnoughFunds",
+      "msg": "Given wallet has not enough funds"
+    },
+    {
+      "code": 304,
+      "name": "PoolIsLocked",
+      "msg": "Pool is locked and funds can no longer be added"
+    },
+    {
+      "code": 305,
+      "name": "PoolIsFull",
+      "msg": "Pool is full"
+    },
+    {
+      "code": 306,
+      "name": "PoolRewardsAreFull",
+      "msg": "Pool rewards are full"
+    },
+    {
+      "code": 307,
+      "name": "PoolIsNotExpired",
+      "msg": "Pool is not expired yet"
+    },
+    {
+      "code": 308,
+      "name": "PoolIsExpired",
+      "msg": "Pool is expired already"
+    },
+    {
+      "code": 309,
+      "name": "TicketCollectionFailure",
+      "msg": "Ticket collection invariant failed"
+    },
+    {
+      "code": 310,
+      "name": "NotEnoughRewards",
+      "msg": "Not enough rewards to collect"
+    },
+    {
+      "code": 311,
+      "name": "InvalidAmountTransferred",
+      "msg": "Invalid amount transferred"
+    },
+    {
+      "code": 312,
+      "name": "IntegerOverlow",
+      "msg": "Integer overflow occured"
+    }
+  ],
+  "metadata": {
+    "address": "BHfLU4UsBdxBZk56GjpGAXkzu8B7JdMitGa9A1VTMmva"
+  }
+}
