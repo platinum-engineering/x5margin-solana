@@ -21,6 +21,19 @@ describe('pool', () => {
     endLockupTs: undefined,
   };
 
+  it('Calculates the APY', () => {
+    const pool = {
+      stakeTargetAmount: new anchor.BN(10000),
+      rewardAmount: new anchor.BN(1000),
+      lockupDuration: new anchor.BN(60 * 60 * 24 * 7), // week
+      stakeAcquiredAmount: new anchor.BN(10000),
+      depositedRewardAmount: new anchor.BN(500),
+    };
+
+    assert.ok(poolClient.poolExpectedAPY(pool) === 141.04293198443193);
+    assert.ok(poolClient.poolAPY(pool) === 11.642808263793455);
+  });
+
   it('Initializes the pool', async () => {
     const administrator = anchor.web3.Keypair.generate();
     const pool = anchor.web3.Keypair.generate();
@@ -236,4 +249,5 @@ describe('pool', () => {
       assert.ok(true);
     }
   });
+
 });

@@ -90,10 +90,46 @@ async function getPools(provider) {
   return await program.account.pool.all();
 }
 
+// TODO: leap year too
+const SECONDS_IN_YEAR = (365 * 24 * 60 * 60).toFixed(20);
+
+function poolExpectedAPY(pool) {
+  const rewardAmount = pool.rewardAmount.toNumber().toFixed(20);
+  const stakeTargetAmount = pool.stakeTargetAmount.toNumber().toFixed(20);
+  const rate = rewardAmount / stakeTargetAmount;
+
+  const periodsInYear = calcPeriodsInYear(pool);
+  const annualRate = rate * periodsInYear;
+
+  return calcAPY(annualRate, periodsInYear);
+}
+
+function poolAPY(pool) {
+  const depositedRewardAmount = pool.depositedRewardAmount.toNumber().toFixed(20);
+  const stakeAcquiredAmount = pool.stakeAcquiredAmount.toNumber().toFixed(20);
+  const rate = depositedRewardAmount / stakeAcquiredAmount;
+
+  const periodsInYear = calcPeriodsInYear(pool);
+  const annualRate = rate * periodsInYear;
+
+  return calcAPY(annualRate, periodsInYear);
+}
+
+function calcPeriodsInYear(pool) {
+  const lockupDuration = pool.lockupDuration.toNumber().toFixed(20);
+  return Math.round(SECONDS_IN_YEAR / lockupDuration);
+}
+
+function calcAPY(annualRate, periodsInYear) {
+  return (1 + annualRate / periodsInYear) ** periodsInYear - 1;
+}
+
 module.exports = {
   addStake,
   removeStake,
   addReward,
   claimReward,
   getPools,
+  poolExpectedAPY,
+  poolAPY,
 };

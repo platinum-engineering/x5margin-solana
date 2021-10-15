@@ -48,6 +48,19 @@ async function getProvider() {
 ]
 ```
 
+## Расчет APY для пула
+
+`poolExpectedAPY(pool)`
+
+`poolAPY(pool)`
+
+* `pool` -- это объект из запроса `getPools`.
+
+`poolExpectedAPY` рассчитывает APY при выполнении всех целевых показателей, то есть в случае
+когда весь пул заполнен и начислены все награды.
+
+`poolAPY` рассчитывает APY на текущий момент, то есть учитываются текущие суммы наград и заполненности пула.
+
 ## Добавление стейка
 
 `addStake(provider, amount, ticket, accounts)`
