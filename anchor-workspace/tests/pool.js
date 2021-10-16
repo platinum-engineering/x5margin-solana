@@ -2,6 +2,7 @@ const anchor = require('@project-serum/anchor');
 const assert = require("assert");
 const utils = require("../web3/pool/utils");
 const poolClient = require("../web3/pool/index");
+const { create } = require('domain');
 
 describe('pool', () => {
   const provider = anchor.Provider.env();
@@ -22,16 +23,17 @@ describe('pool', () => {
   };
 
   it('Calculates the APY', () => {
-    const pool = {
+    const data = {
       stakeTargetAmount: new anchor.BN(10000),
       rewardAmount: new anchor.BN(1000),
       lockupDuration: new anchor.BN(60 * 60 * 24 * 7), // week
       stakeAcquiredAmount: new anchor.BN(10000),
       depositedRewardAmount: new anchor.BN(500),
     };
+    const pool = new poolClient.Pool(data);
 
-    assert.ok(poolClient.poolExpectedAPY(pool) === 141.04293198443193);
-    assert.ok(poolClient.poolAPY(pool) === 11.642808263793455);
+    assert.ok(pool.expectedAPY() === 141.04293198443193);
+    assert.ok(pool.APY() === 11.642808263793455);
   });
 
   it('Initializes the pool', async () => {
@@ -84,14 +86,21 @@ describe('pool', () => {
     const pools = await poolClient.getPools(provider);
     console.log('Known pools: ', pools);
     assert.ok(pools.length == 1);
-    assert.ok(pools[0].publicKey.equals(pool.publicKey));
 
-    const poolAccount = pools[0].account;
+    const createdPool = pools[0];
 
-    assert.ok(poolAccount.topupDuration.eq(topupDuration));
-    assert.ok(poolAccount.lockupDuration.eq(lockupDuration));
-    assert.ok(poolAccount.stakeTargetAmount.eq(targetAmount));
-    assert.ok(poolAccount.rewardAmount.eq(rewardAmount));
+    console.log('Start date:', createdPool.startDate());
+    console.log('End date:', createdPool.endDate());
+    console.log('Topup end date:', createdPool.topupEndDate());
+    console.log('Time to deposit:', createdPool.timeToDeposit());
+    console.log('Time until withdrawal:', createdPool.timeUntilWithdrawal());
+
+    assert.ok(createdPool.publicKey.equals(pool.publicKey));
+
+    assert.ok(createdPool.topupDuration.eq(topupDuration));
+    assert.ok(createdPool.lockupDuration.eq(lockupDuration));
+    assert.ok(createdPool.stakeTargetAmount.eq(targetAmount));
+    assert.ok(createdPool.rewardAmount.eq(rewardAmount));
 
     globals.administrator = administrator;
     globals.pool = pool;

@@ -1,6 +1,7 @@
 const solana_web3 = require('@solana/web3.js');
 const anchor = require('@project-serum/anchor');
 const utils = require('./utils');
+const _ = require('lodash');
 const idl = require('./idl.json');
 
 const programId = new solana_web3.PublicKey(idl.metadata.address);
@@ -87,38 +88,86 @@ async function claimReward(provider, accounts) {
 
 async function getPools(provider) {
   const program = new anchor.Program(idl, programId, provider);
-  return await program.account.pool.all();
+  const pools = (await program.account.pool.all())
+    .map((pool) => new Pool(pool));
+  return pools;
+}
+
+class Pool {
+  constructor(data) {
+    // pool objects come in two flavors:
+    // { publicKey: "...", account: { props } }
+    // { props }
+    if (data.hasOwnProperty('account')) {
+      _.extend(this, data.account);
+      this.publicKey = data.publicKey;
+    } else {
+      _.extend(this, data);
+    }
+  }
+  expectedAPY() {
+    const rewardAmount = this.rewardAmount.toNumber().toFixed(20);
+    const stakeTargetAmount = this.stakeTargetAmount.toNumber().toFixed(20);
+    const rate = rewardAmount / stakeTargetAmount;
+
+    const periodsInYear = this.calcPeriodsInYear();
+    const annualRate = rate * periodsInYear;
+
+    return calcAPY(annualRate, periodsInYear);
+  }
+  APY() {
+    const depositedRewardAmount = this.depositedRewardAmount.toNumber().toFixed(20);
+    const stakeAcquiredAmount = this.stakeAcquiredAmount.toNumber().toFixed(20);
+    const rate = depositedRewardAmount / stakeAcquiredAmount;
+
+    const periodsInYear = this.calcPeriodsInYear();
+    const annualRate = rate * periodsInYear;
+
+    return calcAPY(annualRate, periodsInYear);
+  }
+  calcPeriodsInYear() {
+    const lockupDuration = this.lockupDuration.toNumber().toFixed(20);
+    return Math.round(SECONDS_IN_YEAR / lockupDuration);
+  }
+  totalPoolDeposits() {
+    return this.stakeAcquiredAmount;
+  }
+  maxPoolSize() {
+    return this.stakeTargetAmount;
+  }
+  totalRewards() {
+    return this.rewardAmount;
+  }
+  rewardsRemaining() {
+    return this.depositedRewardAmount;
+  }
+  startDate() {
+    return new Date(this.genesis.toNumber() * 1000);
+  }
+  endDate() {
+    let date = this.startDate();
+    date.setSeconds(date.getSeconds() + this.lockupDuration.toNumber());
+    return date;
+  }
+  topupEndDate() {
+    let date = this.startDate();
+    date.setSeconds(date.getSeconds() + this.topupDuration.toNumber());
+    return date;
+  }
+  timeToDeposit() {
+    let now = new Date(Date.now());
+    let topupEnd = this.topupEndDate();
+    return Math.ceil((topupEnd - now) / 1000);
+  }
+  timeUntilWithdrawal() {
+    let now = new Date(Date.now());
+    let lockupEnd = this.endDate();
+    return Math.ceil((lockupEnd - now) / 1000);
+  }
 }
 
 // TODO: leap year too
 const SECONDS_IN_YEAR = (365 * 24 * 60 * 60).toFixed(20);
-
-function poolExpectedAPY(pool) {
-  const rewardAmount = pool.rewardAmount.toNumber().toFixed(20);
-  const stakeTargetAmount = pool.stakeTargetAmount.toNumber().toFixed(20);
-  const rate = rewardAmount / stakeTargetAmount;
-
-  const periodsInYear = calcPeriodsInYear(pool);
-  const annualRate = rate * periodsInYear;
-
-  return calcAPY(annualRate, periodsInYear);
-}
-
-function poolAPY(pool) {
-  const depositedRewardAmount = pool.depositedRewardAmount.toNumber().toFixed(20);
-  const stakeAcquiredAmount = pool.stakeAcquiredAmount.toNumber().toFixed(20);
-  const rate = depositedRewardAmount / stakeAcquiredAmount;
-
-  const periodsInYear = calcPeriodsInYear(pool);
-  const annualRate = rate * periodsInYear;
-
-  return calcAPY(annualRate, periodsInYear);
-}
-
-function calcPeriodsInYear(pool) {
-  const lockupDuration = pool.lockupDuration.toNumber().toFixed(20);
-  return Math.round(SECONDS_IN_YEAR / lockupDuration);
-}
 
 function calcAPY(annualRate, periodsInYear) {
   return (1 + annualRate / periodsInYear) ** periodsInYear - 1;
@@ -130,6 +179,5 @@ module.exports = {
   addReward,
   claimReward,
   getPools,
-  poolExpectedAPY,
-  poolAPY,
+  Pool,
 };

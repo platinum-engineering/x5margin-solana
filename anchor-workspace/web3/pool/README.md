@@ -29,9 +29,8 @@ async function getProvider() {
 
 ```js
 [
-    {
+    Pool {
         publicKey: PublicKey { ... },
-        account: {
         poolAuthority: [PublicKey],
         administratorAuthority: [PublicKey],
         nonce: 255,
@@ -48,18 +47,41 @@ async function getProvider() {
 ]
 ```
 
+У объектов-пулов есть методы, описанные ниже.
+
 ## Расчет APY для пула
 
-`poolExpectedAPY(pool)`
+Доступно два метода:
 
-`poolAPY(pool)`
+`pool.expectedAPY()`
+
+`pool.APY()`
 
 * `pool` -- это объект из запроса `getPools`.
 
-`poolExpectedAPY` рассчитывает APY при выполнении всех целевых показателей, то есть в случае
+`expectedAPY` рассчитывает APY при выполнении всех целевых показателей, то есть в случае
 когда весь пул заполнен и начислены все награды.
 
-`poolAPY` рассчитывает APY на текущий момент, то есть учитываются текущие суммы наград и заполненности пула.
+`APY` рассчитывает APY на текущий момент, то есть учитываются текущие суммы наград и заполненности пула.
+
+## Методы для получения информации о пуле
+
+`pool.totalPoolDeposits()`
+
+`pool.maxPoolSize()`
+
+`pool.totalRewards()`
+
+`pool.rewardsRemaining()`
+
+`pool.startDate()` -- возвращает объекта типа `Date`, описывающий дату старта пула.
+
+`pool.endDate()` -- возвращает объект типа `Date`, описывающий дату окончания пула.
+
+`pool.timeToDeposit()` -- время в секундах до окончания времени приема депозитов.
+
+`pool.timeUntilWithdrawal()` -- время в секундах до появления возможности у стейкеров забрать свои депозиты с наградами.
+
 
 ## Добавление стейка
 
