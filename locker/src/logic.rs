@@ -2,6 +2,7 @@ use parity_scale_codec::Decode;
 use solana_api_types::{program::ProgramError, Pubkey};
 use solar::{
     account::{onchain, AccountFields, AccountFieldsMut},
+    authority::Authority,
     input::{AccountSource, BpfProgramInput, ProgramInput},
     prelude::AccountBackend,
     qlog,
@@ -9,14 +10,15 @@ use solar::{
     util::{pubkey_eq, sol_timestamp_now, ResultExt},
 };
 
-use crate::{data::TokenLock, error::Error, instructions, Method, TokenAmount};
+use crate::{data::TokenLock, error::Error, instructions, Method, TokenAmount, UnlockDate};
 
 impl<B: AccountBackend> TokenLock<B> {
     /// Create a new locker.
     pub fn create<S: AccountSource<B>>(
         mut input: S,
-        unlock_date: SolTimestamp,
+        unlock_date: UnlockDate,
         amount: TokenAmount,
+        nonce: u64,
     ) -> Result<(), Error>
     where
         B: AccountBackend<Impl = onchain::Account>,
@@ -29,10 +31,21 @@ impl<B: AccountBackend> TokenLock<B> {
             source_authority,
             vault,
             program_authority,
-            owner_authority,
+            // owner_authority,
         } = parsed.borrow();
 
+        let owner_authority = if input.is_empty() {
+            *source_authority.key()
+        } else {
+            let owner_authority = Authority::any(input.next_account());
+            *owner_authority.key()
+        };
+
         let now = sol_timestamp_now();
+        let unlock_date = match unlock_date {
+            UnlockDate::Absolute(timestamp) => timestamp,
+            UnlockDate::Relative(delta) => SolTimestamp::from(Into::<i64>::into(now) + delta),
+        };
 
         if unlock_date <= now {
             qlog!("can`t initialize new locker with invalid unlock date");
@@ -42,7 +55,8 @@ impl<B: AccountBackend> TokenLock<B> {
         let expected_program_authority = Pubkey::create_program_address(
             &[
                 locker.account().key().as_ref(),
-                owner_authority.key().as_ref(),
+                owner_authority.as_ref(),
+                &nonce.to_le_bytes(),
             ],
             input.program_id(),
         )
@@ -64,7 +78,7 @@ impl<B: AccountBackend> TokenLock<B> {
             .bpf_expect("transfer");
 
         let data = locker.read_mut();
-        data.withdraw_authority = *owner_authority.key();
+        data.withdraw_authority = owner_authority;
         data.mint = *source_wallet.mint();
         data.vault = *vault.key();
         data.program_authority = *program_authority.key();
@@ -179,7 +193,8 @@ pub fn main(input: BpfProgramInput) -> Result<(), ProgramError> {
         Method::CreateLock {
             unlock_date,
             amount,
-        } => TokenLock::create(input, unlock_date, amount).bpf_unwrap(),
+            nonce,
+        } => TokenLock::create(input, unlock_date, amount, nonce).bpf_unwrap(),
         Method::ReLock { unlock_date } => TokenLock::relock(input, unlock_date).bpf_unwrap(),
         Method::Withdraw { amount } => TokenLock::withdraw(input, amount).bpf_unwrap(),
         Method::Increment { amount } => TokenLock::increment(input, amount).bpf_unwrap(),

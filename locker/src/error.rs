@@ -1,7 +1,8 @@
 use solana_api_types::program::ProgramError;
 use solar::{entity::EntityError, error::SolarError, log::Loggable, spl::TokenError};
 
-#[derive(Debug)]
+#[cfg_attr(feature = "debug", derive(Debug))]
+#[derive(IntoStaticStr)]
 pub enum Error {
     InvalidData,
     InvalidAlignment,
@@ -43,7 +44,21 @@ impl From<EntityError> for Error {
 }
 
 impl Loggable for Error {
-    fn push_to_logger<const S: usize>(&self, _logger: &mut solar::log::Logger<S>) {
-        // TODO
+    fn push_to_logger<const S: usize>(&self, logger: &mut solar::log::Logger<S>) {
+        match self {
+            Self::TokenError(error) => {
+                logger.push_str("TokenError: ");
+                error.push_to_logger(logger);
+            }
+            Self::EntityError(error) => {
+                logger.push_str("EntityError: ");
+                error.push_to_logger(logger);
+            }
+            Self::SolarError(error) => {
+                logger.push_str("SolarError: ");
+                error.push_to_logger(logger);
+            }
+            other => logger.push_str(other.into()),
+        }
     }
 }

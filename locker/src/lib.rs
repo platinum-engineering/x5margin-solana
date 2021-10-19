@@ -22,16 +22,28 @@ extern crate parity_scale_codec;
 #[macro_use]
 extern crate solar_macros;
 
+#[macro_use]
+extern crate strum;
+
 use crate::error::Error;
 
 pub type TokenAmount = Checked<u64>;
 pub type TokenAmountF64 = Checked<U64F64>;
 
-#[derive(Debug, PartialEq, Eq, Clone, Encode, Decode)]
+#[derive(PartialEq, Eq, Clone, Encode, Decode)]
+#[cfg_attr(feature = "debug", derive(Debug))]
+pub enum UnlockDate {
+    Absolute(SolTimestamp),
+    Relative(i64),
+}
+
+#[derive(PartialEq, Eq, Clone, Encode, Decode)]
+#[cfg_attr(feature = "debug", derive(Debug))]
 pub enum Method {
     CreateLock {
-        unlock_date: SolTimestamp,
+        unlock_date: UnlockDate,
         amount: TokenAmount,
+        nonce: u64,
     },
     ReLock {
         unlock_date: SolTimestamp,
@@ -58,7 +70,7 @@ pub mod instructions {
             source_authority #s: &Authority<B> = Authority::expected_signed(this, source_wallet.authority())?;
             vault: &mut WalletAccount<B> = WalletAccount::any(this)?;
             program_authority: &Authority<B> = Authority::any(this);
-            owner_authority #s: &Authority<B> = Authority::any_signed(this)?;
+            // owner_authority #s: &Authority<B> = Authority::any_signed(this)?;
         ]
     }
 

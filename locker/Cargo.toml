@@ -7,6 +7,9 @@ version = "0.1.0"
 
 [features]
 onchain = ["solar/onchain"]
+offchain = ["solar/offchain"]
+native = ["solar/native"]
+debug = ["solar/debug"]
 
 [dependencies]
 az = "1.1.1"
@@ -14,6 +17,7 @@ num-traits = "0.2.14"
 num_enum = "0.5"
 static_assertions = "1.1.0"
 
+strum = { version = "0.21", features = ["derive"] }
 fixed = {version = "=1.9.0", features = ["num-traits"]}
 parity-scale-codec = {version = "1.3.7", features = ["derive"]}
 solana-api-types = {path = "../solana-api-types", default-features = false}

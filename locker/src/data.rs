@@ -2,7 +2,7 @@ use std::mem::size_of;
 
 use solana_api_types::Pubkey;
 use solar::{
-    account::{pubkey::PubkeyAccount, AccountBackend, AccountFields, AccountFieldsMut},
+    account::{AccountBackend, AccountFields, AccountFieldsMut},
     entity::{AccountType, EntityBase, EntitySchema},
     reinterpret::{reinterpret_mut_unchecked, reinterpret_unchecked},
     time::SolTimestamp,
@@ -12,7 +12,8 @@ use solar::{
 use crate::error::Error;
 
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Clone)]
+#[cfg_attr(feature = "debug", derive(Debug))]
 pub struct TokenLockState {
     pub withdraw_authority: Pubkey,
     pub mint: Pubkey,
@@ -21,7 +22,7 @@ pub struct TokenLockState {
     pub release_date: SolTimestamp,
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "debug", derive(Debug))]
 pub struct LockerEntitySchema;
 
 impl EntitySchema for LockerEntitySchema {
@@ -30,8 +31,8 @@ impl EntitySchema for LockerEntitySchema {
     type Header = ();
 }
 
-#[derive(Debug)]
-struct TokenLockEntity;
+#[cfg_attr(feature = "debug", derive(Debug))]
+pub struct TokenLockEntity;
 
 impl AccountType for TokenLockEntity {
     type Schema = LockerEntitySchema;
@@ -46,7 +47,7 @@ impl AccountType for TokenLockEntity {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "debug", derive(Debug))]
 pub struct TokenLock<B: AccountBackend> {
     account: EntityBase<B, TokenLockEntity>,
 }
@@ -102,10 +103,33 @@ impl<B: AccountBackend> TokenLock<B> {
     }
 }
 
-impl From<Pubkey> for TokenLock<PubkeyAccount> {
+#[cfg(feature = "offchain")]
+impl From<Pubkey> for TokenLock<solar::account::pubkey::PubkeyAccount> {
     fn from(pubkey: Pubkey) -> Self {
         Self {
             account: pubkey.into(),
         }
+    }
+}
+
+#[cfg(feature = "offchain")]
+pub fn find_locker_program_authority(
+    program_id: &Pubkey,
+    locker: &Pubkey,
+    owner: &Pubkey,
+    initial_nonce: u64,
+) -> (Pubkey, u64) {
+    let mut nonce = initial_nonce;
+    loop {
+        let authority = Pubkey::create_program_address(
+            &[locker.as_ref(), owner.as_ref(), &nonce.to_le_bytes()],
+            program_id,
+        );
+
+        if let Some(authority) = authority {
+            return (authority, nonce);
+        }
+
+        nonce += 1;
     }
 }
