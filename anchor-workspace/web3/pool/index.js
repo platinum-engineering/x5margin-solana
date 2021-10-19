@@ -127,7 +127,7 @@ class Pool {
   }
   calcPeriodsInYear() {
     const lockupDuration = this.lockupDuration.toNumber().toFixed(20);
-    return Math.round(SECONDS_IN_YEAR / lockupDuration);
+    return Math.round(secondsInYear() / lockupDuration);
   }
   totalPoolDeposits() {
     return this.stakeAcquiredAmount;
@@ -155,19 +155,27 @@ class Pool {
     return date;
   }
   timeToDeposit() {
-    let now = new Date(Date.now());
+    let now = new Date();
     let topupEnd = this.topupEndDate();
     return Math.ceil((topupEnd - now) / 1000);
   }
   timeUntilWithdrawal() {
-    let now = new Date(Date.now());
+    let now = new Date();
     let lockupEnd = this.endDate();
     return Math.ceil((lockupEnd - now) / 1000);
   }
 }
 
-// TODO: leap year too
-const SECONDS_IN_YEAR = (365 * 24 * 60 * 60).toFixed(20);
+function leapYear(year) {
+  return ((year % 4 == 0) && (year % 100 != 0)) || (year % 400 == 0);
+}
+
+function secondsInYear() {
+  const year = new Date().getFullYear();
+  const days = leapYear(year) ? 366 : 365;
+
+  return days * 24 * 60 * 60;
+}
 
 function calcAPY(annualRate, periodsInYear) {
   return (1 + annualRate / periodsInYear) ** periodsInYear - 1;
