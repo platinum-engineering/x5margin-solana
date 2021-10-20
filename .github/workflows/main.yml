@@ -63,9 +63,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: Swatinem/rust-cache@v1
+      - uses: actions/setup-node@v2
         with:
-          working-directory: ./anchor-workspace
+          node-version: '14'
+      - uses: Swatinem/rust-cache@v1
       - run: |
           sh -c "$(curl -sSfL https://release.solana.com/v1.7.14/install)"
           export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
@@ -73,5 +74,6 @@ jobs:
           solana-keygen new -o ~/.config/solana/id.json --no-bip39-passphrase
           sudo apt-get install -y pkg-config build-essential libudev-dev
           cargo install --git https://github.com/project-serum/anchor --tag v0.17.0 anchor-cli --locked
+          npm install -g mocha @project-serum/anchor
           anchor test
         working-directory: ./anchor-workspace
