@@ -123,9 +123,6 @@ pub mod pool {
         pool.stake_mint = ctx.accounts.stake_mint.key();
         pool.stake_vault = ctx.accounts.stake_vault.key();
 
-        // TODO: ts bindings have functionality to filter out account types
-        // so we don't have to have some special ids or something
-
         Ok(())
     }
 

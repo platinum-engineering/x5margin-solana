@@ -188,4 +188,5 @@ module.exports = {
   claimReward,
   getPools,
   Pool,
+  utils,
 };

@@ -170,3 +170,14 @@ const ticket = anchor.web3.Keypair.generate();
     poolAuthority: some.publicKey,
 }
 ```
+
+## utils
+
+Так же пакет выставляет наружу модуль `utils`, в котором есть следующие функции:
+
+`utils.createTokenAccount(provider, mint, owner)`
+
+* `provider` -- то же, что и в других функциях.
+* `mint` -- public key токена. В пуле этот ключ находится в поле `stakeMint`.
+* `owner` -- ключ основного аккаунта. Поле необязательное. Если не указать, то
+owner'ом будет `provider.wallet.publicKey`.
