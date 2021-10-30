@@ -147,7 +147,7 @@ describe('pool', () => {
     assert.ok(ticketAccount.authority.equals(provider.wallet.publicKey));
 
     const stakeVault = await poolClient.utils.getTokenAccount(provider, globals.stakeVault);
-    assert.ok(stakeVault.amount.eq(new anchor.BN(100)));
+    assert.ok(stakeVault.amount.eqn(100));
 
     globals.ticket = ticket;
     globals.userWallet = sourceWallet;
@@ -204,24 +204,24 @@ describe('pool', () => {
     assert.ok(poolAccount.depositedRewardAmount.eq(amount));
 
     const stakeVault = await poolClient.utils.getTokenAccount(provider, globals.stakeVault);
-    assert.ok(stakeVault.amount.eq(new anchor.BN(150)));
+    assert.ok(stakeVault.amount.eqn(150));
   });
 
   it('Claims the reward from the pool', async () => {
-    const amountBefore = new anchor.BN(50);
+    const amountBefore = 50;
 
     let poolAccount = await program.account.pool.fetch(globals.pool.publicKey);
-    assert.ok(poolAccount.stakeAcquiredAmount.eq(amountBefore));
+    assert.ok(poolAccount.stakeAcquiredAmount.eqn(amountBefore));
 
     let ticketAccount = await program.account.ticket.fetch(globals.ticket.publicKey);
-    assert.ok(ticketAccount.stakedAmount.eq(amountBefore));
+    assert.ok(ticketAccount.stakedAmount.eqn(amountBefore));
 
     poolAccount = await program.account.pool.fetch(globals.pool.publicKey);
-    assert.ok(poolAccount.stakeAcquiredAmount.eq(new anchor.BN(50)));
+    assert.ok(poolAccount.stakeAcquiredAmount.eqn(50));
 
     let stakeVault = await poolClient.utils.getTokenAccount(provider, globals.stakeVault);
     console.log('Stake vault holds ', stakeVault.amount.toNumber());
-    assert.ok(stakeVault.amount.eq(new anchor.BN(150)));
+    assert.ok(stakeVault.amount.eqn(150));
 
     // waiting till pool expiration
     if (Date.now() < globals.endLockupTs.toNumber() * 1000) {
@@ -237,12 +237,12 @@ describe('pool', () => {
 
     stakeVault = await poolClient.utils.getTokenAccount(provider, globals.stakeVault);
     console.log('Stake vault holds ', stakeVault.amount.toNumber());
-    assert.ok(stakeVault.amount.eq(new anchor.BN(0)));
+    assert.ok(stakeVault.amount.eqn(0));
 
     const targetWallet = await poolClient.utils.getTokenAccount(provider, globals.userWallet);
     console.log('Target wallet holds ', targetWallet.amount.toNumber());
     // 100 - 100 + 50 + 150
-    assert.ok(targetWallet.amount.eq(new anchor.BN(200)));
+    assert.ok(targetWallet.amount.eqn(200));
 
     try {
       const ticketAccount = await program.account.ticket.fetch(globals.ticket.publicKey);
