@@ -6,86 +6,6 @@ const idl = require('./idl.json');
 
 const programId = new solana_web3.PublicKey(idl.metadata.address);
 
-async function addStake(provider, amount, ticket, accounts) {
-  const program = new anchor.Program(idl, programId, provider);
-
-  return await program.rpc.addStake(
-    amount,
-    {
-      accounts: {
-        tokenProgram: utils.TOKEN_PROGRAM_ID,
-        pool: accounts.pool,
-        ticket: ticket.publicKey,
-        stakeVault: accounts.stakeVault,
-        sourceAuthority: accounts.sourceAuthority,
-        sourceWallet: accounts.sourceWallet,
-        clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-      },
-      signers: [ticket],
-      instructions: [
-        await program.account.ticket.createInstruction(ticket),
-      ],
-    }
-  );
-}
-
-async function removeStake(provider, amount, accounts) {
-  const program = new anchor.Program(idl, programId, provider);
-
-  return await program.rpc.removeStake(
-    amount,
-    {
-      accounts: {
-        tokenProgram: utils.TOKEN_PROGRAM_ID,
-        pool: accounts.pool,
-        staker: accounts.staker,
-        ticket: accounts.ticket,
-        poolAuthority: accounts.poolAuthority,
-        stakeVault: accounts.stakeVault,
-        targetWallet: accounts.targetWallet,
-        clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-      }
-    }
-  );
-}
-
-async function addReward(provider, amount, accounts) {
-  const program = new anchor.Program(idl, programId, provider);
-
-  return await program.rpc.addReward(
-    amount,
-    {
-      accounts: {
-        tokenProgram: utils.TOKEN_PROGRAM_ID,
-        pool: accounts.pool,
-        stakeVault: accounts.stakeVault,
-        sourceAuthority: accounts.sourceAuthority,
-        sourceWallet: accounts.sourceWallet,
-        clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-      }
-    }
-  );
-}
-
-async function claimReward(provider, accounts) {
-  const program = new anchor.Program(idl, programId, provider);
-
-  return await program.rpc.claimReward(
-    {
-      accounts: {
-        tokenProgram: utils.TOKEN_PROGRAM_ID,
-        pool: accounts.pool,
-        staker: accounts.staker,
-        ticket: accounts.ticket,
-        poolAuthority: accounts.poolAuthority,
-        stakeVault: accounts.stakeVault,
-        targetWallet: accounts.targetWallet,
-        clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-      }
-    }
-  )
-}
-
 async function getPools(provider) {
   const program = new anchor.Program(idl, programId, provider);
   const pools = (await program.account.pool.all())
@@ -104,6 +24,110 @@ class Pool {
     } else {
       _.extend(this, data);
     }
+  }
+  async prepareTicket(staker) {
+    const [ticket, bump] = await anchor.web3.PublicKey.findProgramAddress(
+      [
+        this.publicKey.toBuffer(),
+        staker.toBuffer(),
+      ],
+      programId,
+    );
+    return { publicKey: ticket, bump };
+  }
+  async addStake(provider, amount, ticket, accounts) {
+    const program = new anchor.Program(idl, programId, provider);
+
+    return await program.rpc.addStake(
+      amount, ticket.bump,
+      {
+        accounts: {
+          pool: this.publicKey,
+          staker: accounts.staker,
+          ticket: ticket.publicKey,
+          stakeVault: accounts.stakeVault,
+          sourceAuthority: accounts.sourceAuthority,
+          sourceWallet: accounts.sourceWallet,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+          tokenProgram: utils.TOKEN_PROGRAM_ID,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        },
+      }
+    );
+  }
+  async removeStake(provider, amount, accounts) {
+    const program = new anchor.Program(idl, programId, provider);
+
+    const poolAuthority = await anchor.web3.PublicKey.createProgramAddress(
+      [
+        this.publicKey.toBuffer(),
+        this.administratorAuthority.toBuffer(),
+        [this.bump],
+      ],
+      programId
+    );
+
+    return await program.rpc.removeStake(
+      amount,
+      {
+        accounts: {
+          pool: this.publicKey,
+          staker: accounts.staker,
+          ticket: accounts.ticket,
+          poolAuthority,
+          stakeVault: accounts.stakeVault,
+          targetWallet: accounts.targetWallet,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+          tokenProgram: utils.TOKEN_PROGRAM_ID,
+        }
+      }
+    );
+  }
+
+  async addReward(provider, amount, accounts) {
+    const program = new anchor.Program(idl, programId, provider);
+
+    return await program.rpc.addReward(
+      amount,
+      {
+        accounts: {
+          tokenProgram: utils.TOKEN_PROGRAM_ID,
+          pool: this.publicKey,
+          stakeVault: accounts.stakeVault,
+          sourceAuthority: accounts.sourceAuthority,
+          sourceWallet: accounts.sourceWallet,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+        }
+      }
+    );
+  }
+
+  async claimReward(provider, accounts) {
+    const program = new anchor.Program(idl, programId, provider);
+
+    const poolAuthority = await anchor.web3.PublicKey.createProgramAddress(
+      [
+        this.publicKey.toBuffer(),
+        this.administratorAuthority.toBuffer(),
+        [this.bump],
+      ],
+      programId
+    );
+
+    return await program.rpc.claimReward(
+      {
+        accounts: {
+          tokenProgram: utils.TOKEN_PROGRAM_ID,
+          pool: this.publicKey,
+          staker: accounts.staker,
+          ticket: accounts.ticket,
+          poolAuthority,
+          stakeVault: accounts.stakeVault,
+          targetWallet: accounts.targetWallet,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+        }
+      }
+    )
   }
   expectedAPY() {
     const rewardAmount = this.rewardAmount.toNumber().toFixed(20);
@@ -182,10 +206,6 @@ function calcAPY(annualRate, periodsInYear) {
 }
 
 module.exports = {
-  addStake,
-  removeStake,
-  addReward,
-  claimReward,
   getPools,
   Pool,
   utils,

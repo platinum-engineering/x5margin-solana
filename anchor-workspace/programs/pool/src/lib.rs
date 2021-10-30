@@ -8,9 +8,8 @@ declare_id!("BHfLU4UsBdxBZk56GjpGAXkzu8B7JdMitGa9A1VTMmva");
 #[account]
 #[derive(Debug)]
 pub struct Pool {
-    pool_authority: Pubkey,
     administrator_authority: Pubkey,
-    nonce: u8,
+    bump: u8,
 
     genesis: i64,
     topup_duration: i64,
@@ -39,11 +38,22 @@ impl Pool {
 pub struct Ticket {
     authority: Pubkey,
     staked_amount: u64,
+    bump: u8,
+}
+
+impl Default for Ticket {
+    fn default() -> Self {
+        Self {
+            authority: Default::default(),
+            staked_amount: Default::default(),
+            bump: Default::default(),
+        }
+    }
 }
 
 // TODO: not so elegant
 fn ticket_collect<'info>(
-    ticket: &Account<'info, Ticket>,
+    ticket: &ProgramAccount<'info, Ticket>,
     beneficiary: &AccountInfo<'info>,
 ) -> Result<bool> {
     if ticket.staked_amount == 0 {
@@ -61,8 +71,8 @@ fn ticket_collect<'info>(
 
 #[error]
 pub enum ErrorCode {
-    #[msg("Given nonce is invalid")]
-    InvalidNonce,
+    #[msg("Given bump is invalid")]
+    InvalidBump,
     #[msg("Given authority does not match expected one")]
     InvalidAuthority,
     #[msg("Given topup duration lasts longer than lockup duration")]
@@ -93,10 +103,10 @@ pub enum ErrorCode {
 pub mod pool {
     use super::*;
 
-    #[access_control(InitializePool::accounts(&ctx, nonce))]
+    #[access_control(InitializePool::accounts(&ctx, bump))]
     pub fn initialize_pool(
         ctx: Context<InitializePool>,
-        nonce: u8,
+        bump: u8,
         topup_duration: i64,
         lockup_duration: i64,
         target_amount: u64,
@@ -108,9 +118,8 @@ pub mod pool {
 
         let pool = &mut ctx.accounts.pool;
 
-        pool.pool_authority = ctx.accounts.pool_authority.key();
         pool.administrator_authority = ctx.accounts.administrator_authority.key();
-        pool.nonce = nonce;
+        pool.bump = bump;
 
         pool.genesis = now;
         pool.topup_duration = topup_duration;
@@ -126,7 +135,7 @@ pub mod pool {
         Ok(())
     }
 
-    pub fn add_stake(ctx: Context<AddStake>, amount: u64) -> Result<()> {
+    pub fn add_stake(ctx: Context<AddStake>, amount: u64, bump: u8) -> Result<()> {
         require!(ctx.accounts.source_wallet.amount >= amount, NotEnoughFunds);
 
         let now = ctx.accounts.clock.unix_timestamp;
@@ -152,7 +161,7 @@ pub mod pool {
             authority: ctx.accounts.source_authority.to_account_info(),
         };
         let cpi_program = ctx.accounts.token_program.clone();
-        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        let cpi_ctx = CpiContext::new(cpi_program.to_account_info(), cpi_accounts);
         token::transfer(cpi_ctx, transfer_amount)?;
 
         stake_vault.reload()?;
@@ -164,8 +173,10 @@ pub mod pool {
         );
 
         pool.stake_acquired_amount += transfer_amount;
-        ticket.staked_amount += transfer_amount;
-        ticket.authority = ctx.accounts.source_authority.key();
+
+        ticket.staked_amount = transfer_amount;
+        ticket.authority = ctx.accounts.staker.key();
+        ticket.bump = bump;
 
         Ok(())
     }
@@ -194,11 +205,12 @@ pub mod pool {
         let seeds = &[
             pool_key.as_ref(),
             pool.administrator_authority.as_ref(),
-            &[pool.nonce],
+            &[pool.bump],
         ];
         let signer = &[&seeds[..]];
 
-        let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer);
+        let cpi_ctx =
+            CpiContext::new_with_signer(cpi_program.to_account_info(), cpi_accounts, signer);
         token::transfer(cpi_ctx, transfer_amount)?;
 
         stake_vault.reload()?;
@@ -243,7 +255,7 @@ pub mod pool {
         let seeds = &[
             pool_key.as_ref(),
             pool.administrator_authority.as_ref(),
-            &[pool.nonce],
+            &[pool.bump],
         ];
         let signer = &[&seeds[..]];
 
@@ -255,7 +267,8 @@ pub mod pool {
             authority: ctx.accounts.pool_authority.to_account_info(),
         };
         let cpi_program = ctx.accounts.token_program.clone();
-        let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer);
+        let cpi_ctx =
+            CpiContext::new_with_signer(cpi_program.to_account_info(), cpi_accounts, signer);
         token::transfer(cpi_ctx, transfer_amount)?;
 
         stake_vault.reload()?;
@@ -296,7 +309,7 @@ pub mod pool {
             authority: ctx.accounts.source_authority.to_account_info(),
         };
         let cpi_program = ctx.accounts.token_program.clone();
-        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        let cpi_ctx = CpiContext::new(cpi_program.to_account_info(), cpi_accounts);
         token::transfer(cpi_ctx, transfer_amount)?;
 
         stake_vault.reload()?;
@@ -331,16 +344,16 @@ pub struct InitializePool<'info> {
 }
 
 impl<'info> InitializePool<'info> {
-    fn accounts(ctx: &Context<InitializePool<'info>>, nonce: u8) -> Result<()> {
+    fn accounts(ctx: &Context<InitializePool<'info>>, bump: u8) -> Result<()> {
         let expected_authority = Pubkey::create_program_address(
             &[
                 ctx.accounts.pool.key().as_ref(),
                 ctx.accounts.administrator_authority.key.as_ref(),
-                &[nonce],
+                &[bump],
             ],
             ctx.program_id,
         )
-        .map_err(|_| ErrorCode::InvalidNonce)?;
+        .map_err(|_| ErrorCode::InvalidBump)?;
 
         if ctx.accounts.pool_authority.key != &expected_authority {
             return Err(ErrorCode::InvalidAuthority.into());
@@ -355,13 +368,22 @@ impl<'info> InitializePool<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(amount: u64, bump: u8)]
 pub struct AddStake<'info> {
-    #[account(constraint = token_program.key == &token::ID)]
-    token_program: AccountInfo<'info>,
     #[account(mut)]
     pool: Account<'info, Pool>,
-    #[account(zero)]
-    ticket: Account<'info, Ticket>,
+    #[account(signer)]
+    staker: AccountInfo<'info>,
+    #[account(
+        init,
+        payer = staker,
+        seeds = [
+            pool.key().as_ref(),
+            staker.key().as_ref(),
+        ],
+        bump = bump,
+    )]
+    ticket: ProgramAccount<'info, Ticket>,
     #[account(mut)]
     stake_vault: Account<'info, TokenAccount>,
     #[account(signer)]
@@ -369,37 +391,52 @@ pub struct AddStake<'info> {
     #[account(mut)]
     source_wallet: Account<'info, TokenAccount>,
 
-    pub clock: Sysvar<'info, Clock>,
+    clock: Sysvar<'info, Clock>,
+    system_program: Program<'info, System>,
+    token_program: Program<'info, token::Token>,
 }
 
 #[derive(Accounts)]
 pub struct RemoveStake<'info> {
-    #[account(constraint = token_program.key == &token::ID)]
-    token_program: AccountInfo<'info>,
     #[account(mut)]
     pool: Account<'info, Pool>,
     #[account(mut, signer)]
     staker: AccountInfo<'info>,
-    #[account(mut, constraint = ticket.authority == *staker.key)]
-    ticket: Account<'info, Ticket>,
+    #[account(
+        mut,
+        constraint = ticket.authority == *staker.key,
+        seeds = [
+            pool.key().as_ref(),
+            staker.key().as_ref()
+        ],
+        bump = ticket.bump,
+    )]
+    ticket: ProgramAccount<'info, Ticket>,
     pool_authority: AccountInfo<'info>,
     #[account(mut)]
     stake_vault: Account<'info, TokenAccount>,
     #[account(mut)]
     target_wallet: Account<'info, TokenAccount>,
 
-    pub clock: Sysvar<'info, Clock>,
+    clock: Sysvar<'info, Clock>,
+    token_program: Program<'info, token::Token>,
 }
 
 #[derive(Accounts)]
 pub struct ClaimReward<'info> {
-    #[account(constraint = token_program.key == &token::ID)]
-    token_program: AccountInfo<'info>,
     pool: Account<'info, Pool>,
     #[account(mut, signer)]
     staker: AccountInfo<'info>,
-    #[account(mut, constraint = ticket.authority == *staker.key)]
-    ticket: Account<'info, Ticket>,
+    #[account(
+        mut,
+        constraint = ticket.authority == *staker.key,
+        seeds = [
+            pool.key().as_ref(),
+            staker.key().as_ref()
+        ],
+        bump = ticket.bump,
+    )]
+    ticket: ProgramAccount<'info, Ticket>,
     pool_authority: AccountInfo<'info>,
     #[account(mut)]
     stake_vault: Account<'info, TokenAccount>,
@@ -407,12 +444,11 @@ pub struct ClaimReward<'info> {
     target_wallet: Account<'info, TokenAccount>,
 
     pub clock: Sysvar<'info, Clock>,
+    token_program: Program<'info, token::Token>,
 }
 
 #[derive(Accounts)]
 pub struct AddReward<'info> {
-    #[account(constraint = token_program.key == &token::ID)]
-    token_program: AccountInfo<'info>,
     #[account(mut)]
     pool: Account<'info, Pool>,
     #[account(mut)]
@@ -423,4 +459,5 @@ pub struct AddReward<'info> {
     source_wallet: Account<'info, TokenAccount>,
 
     pub clock: Sysvar<'info, Clock>,
+    token_program: Program<'info, token::Token>,
 }

@@ -1,5 +1,6 @@
 const anchor = require('@project-serum/anchor');
 const assert = require("assert");
+const { globalAgent } = require('http');
 const poolClient = require("../web3/pool/index");
 
 describe('pool', () => {
@@ -11,8 +12,7 @@ describe('pool', () => {
   let globals = {
     administrator: undefined,
     pool: undefined,
-    poolAuthority: undefined,
-    nonce: undefined,
+    bump: undefined,
     stakeMintToken: undefined,
     stakeVault: undefined,
     ticket: undefined,
@@ -41,7 +41,7 @@ describe('pool', () => {
     const stakeMintToken = await poolClient.utils.createMint(provider);
     const stakeMint = stakeMintToken.publicKey;
 
-    const [poolAuthority, nonce] = await anchor.web3.PublicKey.findProgramAddress(
+    const [poolAuthority, bump] = await anchor.web3.PublicKey.findProgramAddress(
       [
         pool.publicKey.toBuffer(),
         administrator.publicKey.toBuffer(),
@@ -61,7 +61,7 @@ describe('pool', () => {
     const rewardAmount = new anchor.BN(100);
 
     await program.rpc.initializePool(
-      nonce,
+      bump,
       topupDuration,
       lockupDuration,
       targetAmount,
@@ -101,9 +101,8 @@ describe('pool', () => {
     assert.ok(createdPool.rewardAmount.eq(rewardAmount));
 
     globals.administrator = administrator;
-    globals.pool = pool;
-    globals.poolAuthority = poolAuthority;
-    globals.nonce = nonce;
+    globals.pool = createdPool;
+    globals.bump = bump;
     globals.stakeMintToken = stakeMintToken;
     globals.stakeVault = stakeVault;
 
@@ -113,7 +112,6 @@ describe('pool', () => {
 
   it('Adds stake to the pool', async () => {
     const amount = new anchor.BN(100);
-    const ticket = anchor.web3.Keypair.generate();
 
     const sourceWallet = await poolClient.utils.createTokenAccount(
       provider,
@@ -128,11 +126,13 @@ describe('pool', () => {
       amount.toString(),
     );
 
-    await poolClient.addStake(provider, amount, ticket, {
-      pool: globals.pool.publicKey,
+    const ticket = await globals.pool.prepareTicket(provider.wallet.publicKey);
+
+    await globals.pool.addStake(provider, amount, ticket, {
       stakeVault: globals.stakeVault,
       sourceAuthority: provider.wallet.publicKey,
       sourceWallet,
+      staker: provider.wallet.publicKey,
     });
 
     const poolAccount = await program.account.pool.fetch(globals.pool.publicKey);
@@ -156,11 +156,9 @@ describe('pool', () => {
   it('Removes the stake from the pool', async () => {
     const amount = new anchor.BN(50);
 
-    await poolClient.removeStake(provider, amount, {
-      pool: globals.pool.publicKey,
+    await globals.pool.removeStake(provider, amount, {
       staker: provider.wallet.publicKey,
       ticket: globals.ticket.publicKey,
-      poolAuthority: globals.poolAuthority,
       stakeVault: globals.stakeVault,
       targetWallet: globals.userWallet
     });
@@ -194,8 +192,7 @@ describe('pool', () => {
       amount.toString(),
     );
 
-    await poolClient.addReward(provider, amount, {
-      pool: globals.pool.publicKey,
+    await globals.pool.addReward(provider, amount, {
       stakeVault: globals.stakeVault,
       sourceAuthority: provider.wallet.publicKey,
       sourceWallet,
@@ -231,11 +228,9 @@ describe('pool', () => {
       await poolClient.utils.sleep(globals.endLockupTs.toNumber() * 1000 - Date.now() + 5000);
     }
 
-    await poolClient.claimReward(provider, {
-      pool: globals.pool.publicKey,
+    await globals.pool.claimReward(provider, {
       staker: provider.wallet.publicKey,
       ticket: globals.ticket.publicKey,
-      poolAuthority: globals.poolAuthority,
       stakeVault: globals.stakeVault,
       targetWallet: globals.userWallet,
     });
@@ -256,5 +251,4 @@ describe('pool', () => {
       assert.ok(true);
     }
   });
-
 });
