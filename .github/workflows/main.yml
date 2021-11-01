@@ -81,6 +81,5 @@ jobs:
           yarn install
           (cd web3/pool; yarn install)
           anchor build
-          cp target/idl/pool.json web3/pool/idl.json
           anchor test
         working-directory: ./anchor-workspace
