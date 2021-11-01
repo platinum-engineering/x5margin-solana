@@ -140,11 +140,14 @@ describe('pool', () => {
 
     assert.ok(poolAccount.stakeAcquiredAmount.eq(amount));
 
-    const ticketAccount = await program.account.ticket.fetch(ticket.publicKey);
+    const ownedTickets = await poolClient.getOwnedTickets(provider);
+    assert.equal(ownedTickets.length, 1);
+
+    const ticketAccount = ownedTickets[0];
     console.log('Data: ', ticketAccount);
 
-    assert.ok(ticketAccount.stakedAmount.eq(amount));
-    assert.ok(ticketAccount.authority.equals(provider.wallet.publicKey));
+    assert.ok(ticketAccount.account.stakedAmount.eq(amount));
+    assert.ok(ticketAccount.account.authority.equals(provider.wallet.publicKey));
 
     const stakeVault = await poolClient.utils.getTokenAccount(provider, globals.stakeVault);
     assert.ok(stakeVault.amount.eqn(100));

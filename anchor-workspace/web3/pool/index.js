@@ -13,6 +13,23 @@ async function getPools(provider) {
   return pools;
 }
 
+async function getOwnedTickets(provider, owner) {
+  if (owner === undefined) {
+    owner = provider.wallet.publicKey;
+  }
+  const program = new anchor.Program(idl, programId, provider);
+  return await program.account.ticket.all([
+    {
+      memcmp: {
+        // 8 bytes for discriminator
+        offset: 8,
+        bytes: owner.toBase58(),
+      },
+    },
+  ]
+  );
+}
+
 class Pool {
   constructor(data) {
     // pool objects come in two flavors:
@@ -207,6 +224,7 @@ function calcAPY(annualRate, periodsInYear) {
 
 module.exports = {
   getPools,
+  getOwnedTickets,
   Pool,
   utils,
 };
