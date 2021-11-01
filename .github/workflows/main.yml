@@ -80,6 +80,7 @@ jobs:
           export NODE_PATH=`npm list -g | head -1`/node_modules
           yarn install
           (cd web3/pool; yarn install)
+          anchor build
           cp target/idl/pool.json web3/pool/idl.json
           anchor test
         working-directory: ./anchor-workspace
