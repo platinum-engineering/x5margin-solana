@@ -321,6 +321,10 @@
             "type": "publicKey"
           },
           {
+            "name": "pool",
+            "type": "publicKey"
+          },
+          {
             "name": "stakedAmount",
             "type": "u64"
           },

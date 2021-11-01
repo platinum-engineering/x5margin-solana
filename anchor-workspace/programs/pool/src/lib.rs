@@ -37,6 +37,7 @@ impl Pool {
 #[account]
 pub struct Ticket {
     authority: Pubkey,
+    pool: Pubkey,
     staked_amount: u64,
     bump: u8,
 }
@@ -45,6 +46,7 @@ impl Default for Ticket {
     fn default() -> Self {
         Self {
             authority: Default::default(),
+            pool: Default::default(),
             staked_amount: Default::default(),
             bump: Default::default(),
         }
@@ -174,8 +176,9 @@ pub mod pool {
 
         pool.stake_acquired_amount += transfer_amount;
 
-        ticket.staked_amount = transfer_amount;
         ticket.authority = ctx.accounts.staker.key();
+        ticket.pool = pool.key();
+        ticket.staked_amount = transfer_amount;
         ticket.bump = bump;
 
         Ok(())
