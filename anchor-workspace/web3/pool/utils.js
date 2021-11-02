@@ -23,6 +23,9 @@ async function createMint(provider, authority) {
 }
 
 async function createTokenAccount(provider, mint, owner) {
+  if (owner === undefined) {
+    owner = provider.wallet.publicKey;
+  }
   const token = new spl.Token(
     provider.connection,
     mint,

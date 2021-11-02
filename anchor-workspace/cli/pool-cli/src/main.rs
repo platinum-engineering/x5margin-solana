@@ -80,27 +80,16 @@ struct Opts {
 
 #[derive(Debug, StructOpt)]
 enum Command {
-    /// Generate program derived address.
-    GeneratePDA {
-        #[structopt(long)]
-        administrator: Pubkey,
-        #[structopt(long)]
-        pool: Pubkey,
-    },
     /// Initialize stake pool.
     Initialize {
         #[structopt(long)]
         administrator: CliKeypair<()>,
-        #[structopt(long)]
-        pool_authority: Pubkey,
         #[structopt(long)]
         pool: CliKeypair<()>,
         #[structopt(long)]
         stake_mint: Pubkey,
         #[structopt(long)]
         stake_vault: Pubkey,
-        #[structopt(long)]
-        nonce: u8,
         #[structopt(long)]
         lockup_duration: i64,
         #[structopt(long)]
@@ -127,24 +116,11 @@ fn main() -> Result<()> {
     let pool_client = client.program(opts.pool_program_id);
 
     match opts.cmd {
-        Command::GeneratePDA {
-            administrator,
-            pool,
-        } => {
-            let (pda_key, nonce) = Pubkey::find_program_address(
-                &[pool.as_ref(), administrator.as_ref()],
-                &opts.pool_program_id,
-            );
-
-            println!("Generated PDA: {}\nNonce: {}", pda_key, nonce);
-        }
         Command::Initialize {
             administrator,
-            pool_authority,
             pool,
             stake_mint,
             stake_vault,
-            nonce,
             lockup_duration,
             topup_duration,
             reward_amount,
@@ -154,6 +130,11 @@ fn main() -> Result<()> {
                 .map_err(|err| anyhow!("failed to read keypair: {}", err))?;
             let pool = read_keypair_file(pool.as_ref())
                 .map_err(|err| anyhow!("failed to read keypair: {}", err))?;
+
+            let (pool_authority, bump) = Pubkey::find_program_address(
+                &[pool.pubkey().as_ref(), administrator.pubkey().as_ref()],
+                &pool_client.id(),
+            );
 
             let r = pool_client
                 .request()
@@ -175,7 +156,7 @@ fn main() -> Result<()> {
                     clock: clock::ID,
                 })
                 .args(pool::instruction::InitializePool {
-                    nonce,
+                    bump,
                     lockup_duration,
                     topup_duration,
                     reward_amount,
